@@ -1,3 +1,5 @@
+import sys
+
 TK_OPERATOR = 0
 TK_NUM = 1
 TK_IDENT = 2
@@ -39,12 +41,14 @@ class Token(object):
         # The element is a tuple with the structure (kind, val, exp, len, str)
         # The value is represented as scientific notation, therefore needs val and exp parts
         self.Token = []       
-    
+        self.line_count = 1
+        self.err_line_idx = 0
+        
     def file2str(self, filename):
         with open(filename, 'r') as file:
             for line in file:
             # Add the processed line to the contents string with a space
-                self.qasm_str += line
+                self.qasm_str += line 
     
     @staticmethod
     def is_alnum(c):
@@ -57,7 +61,10 @@ class Token(object):
         i = 0
         while i < len(TK.qasm_str):
             # Skip whitespace
-            if TK.qasm_str[i].isspace() or TK.qasm_str[i] == "\t":
+            if TK.qasm_str[i].isspace() or TK.qasm_str[i] == "\t" or TK.qasm_str[i] == "\n":
+                if TK.qasm_str[i] == "\n":
+                    TK.line_count += 1
+                    TK.err_line_idx = i+1
                 i += 1
                 continue
             # Check for a comment
@@ -80,6 +87,13 @@ class Token(object):
                 TK.Token.append((TK_OPERATOR, 0, 0, 1, ","))
                 i += 1
                 continue
+            
+            # Check for ->
+            if TK.qasm_str[i] == "-" and TK.qasm_str[i+1] == ">":
+                if TK.qasm_str[i+2].isspace() or (TK.is_alnum(TK.qasm_str[i+2]) and TK.qasm_str[i+2] != "_"):
+                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "->"))
+                    i += 2
+                    continue
             
             # Check for some operators
             if TK.qasm_str[i] == "+" or TK.qasm_str[i] == "-" or TK.qasm_str[i] == "*" or TK.qasm_str[i] == "/" or TK.qasm_str[i] == "^" or TK.qasm_str[i] == "(" or TK.qasm_str[i] == ")":
@@ -391,12 +405,36 @@ class Token(object):
                 TK.Token.append((TK_NUM, float(num), float(exp), i-i_init, TK.qasm_str[i_init:i]))
                 continue
             
-            raise Exception("Invalid character, cannot Tokenize!")
+            # raise Exception("Invalid character, cannot Tokenize!")
+            TK.annotate_error(TK.qasm_str, i, "Invalid character, cannot Tokenize!", TK.line_count, TK.err_line_idx)
         
-        return TK.Token
+        return TK.qasm_str, TK.Token
+    
+    @staticmethod
+    def make_string_red(input_string):
+        return "\033[91m" + input_string + "\033[0m"
+
+    @staticmethod
+    def annotate_error(input_string, error_index, error_message, line_idx, line_start):
+        # Check if the index is within the bounds of the string
+        if error_index < 0 or error_index >= len(input_string):
+            raise ValueError("Error index out of bounds")
+        # Find the end index of the line containing the error
+        line_end = 0
+        while input_string[error_index+line_end] != "\n":
+            line_end += 1
+        # Prepare the error annotation
+        string_init = "[line: "+str(line_idx)+"] "
+        input_line = string_init + input_string[line_start:error_index+line_end]
+        hat_line = " "*(len(string_init)+error_index-line_start) + Token.make_string_red("^")
+        err_line = " "*(len(string_init)+error_index-line_start) + Token.make_string_red(error_message)
+        # Combine and return the annotated string
+        annotated_string = input_line + "\n" + hat_line + "\n" + err_line
+        sys.exit(annotated_string)
 
 
 filepath = "qsofinstr/check.qasm"
-TK = Token.Tokenize(filepath)
+str, TK = Token.Tokenize(filepath)
 # print(TK.qasm_str)
-print(TK)
+print(str)
+# print(TK)
