@@ -6,6 +6,7 @@ ND_QREG = 1
 ND_CREG = 2
 ND_OPAQUE = 3
 ND_IF = 4
+ND_EQUAL = 5
 
 class Node:
     def __init__(self, kind):
@@ -73,13 +74,19 @@ class Parser(Token):
     @staticmethod
     def create_node_qreg(qreg):
         node = Node(ND_QREG)
-        node.qregs.extend(qreg)
+        if isinstance(qreg, list):
+            node.qregs.extend(qreg)
+        else:
+            node.qregs.append(qreg)
         return node
     
     @staticmethod
     def create_node_creg(creg):
         node = Node(ND_CREG)
-        node.qregs.extend(creg)
+        if isinstance(creg, list):
+            node.cregs.extend(creg)
+        else:
+            node.cregs.append(creg)
         return node
     
     def expect(self, op):
@@ -233,4 +240,16 @@ class Parser(Token):
         # Recursive descent parsing for 'qop'
         else:
             return self.qop()
-        
+    
+    # Recursive descent parsing for 'condition   := id == nninteger'
+    def condition(self):
+        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+            if self.check_operator_str(self.token_idx, ")"):
+                self.error_at(self.token_idx, "The condition cannot be empty")
+            else:
+                self.error_at(self.token_idx, "The condition cannot be this type")
+        condition_lhs = self.create_node_creg((self.token[self.token_idx][self.str_idx], -1))
+        self.expect("==")
+        condition_rhs = self.create_node_num(self.token[self.token_idx][self.val_idx])
+        node_condition = Parser.create_node(ND_EQUAL, condition_lhs, condition_rhs)
+        return node_condition
