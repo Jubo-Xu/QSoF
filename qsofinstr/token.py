@@ -43,6 +43,14 @@ class Token(object):
         self.Token = []       
         self.line_count = 1
         self.err_line_idx = 0
+        self.kind_idx = 0
+        self.val_idx = 1
+        self.exp_idx = 2
+        self.len_idx = 3
+        self.str_idx = 4
+        self.line_count_idx = 5
+        self.err_line_idx_idx = 6
+        self.idx_idx = 7
         
     def file2str(self, filename):
         with open(filename, 'r') as file:
@@ -78,291 +86,298 @@ class Token(object):
                     raise Exception("Invalid character '/'")
             # Check for ;
             if TK.qasm_str[i] == ";":
-                TK.Token.append((TK_OPERATOR, 0, 0, 1, ";"))
+                TK.Token.append((TK_OPERATOR, 0, 0, 1, ";", TK.line_count, TK.err_line_idx, i))
                 i += 1
                 continue
             
             # Check for ,
             if TK.qasm_str[i] == ",":
-                TK.Token.append((TK_OPERATOR, 0, 0, 1, ","))
+                TK.Token.append((TK_OPERATOR, 0, 0, 1, ",", TK.line_count, TK.err_line_idx, i))
                 i += 1
                 continue
             
             # Check for ->
             if TK.qasm_str[i] == "-" and TK.qasm_str[i+1] == ">":
                 if TK.qasm_str[i+2].isspace() or (TK.is_alnum(TK.qasm_str[i+2]) and TK.qasm_str[i+2] != "_"):
-                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "->"))
+                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "->", TK.line_count, TK.err_line_idx, i))
+                    i += 2
+                    continue
+            
+            # Check for ==
+            if TK.qasm_str[i] == "=" and TK.qasm_str[i+1] == "=":
+                if TK.qasm_str[i+2].isspace() or TK.qasm_str[i+2].isdigit():
+                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "==", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for some operators
             if TK.qasm_str[i] == "+" or TK.qasm_str[i] == "-" or TK.qasm_str[i] == "*" or TK.qasm_str[i] == "/" or TK.qasm_str[i] == "^" or TK.qasm_str[i] == "(" or TK.qasm_str[i] == ")":
-                TK.Token.append((TK_OPERATOR, 0, 0, 1, TK.qasm_str[i]))
+                TK.Token.append((TK_OPERATOR, 0, 0, 1, TK.qasm_str[i], TK.line_count, TK.err_line_idx, i))
                 i += 1
                 continue
             
             # Check for []
             if TK.qasm_str[i] == "[" or TK.qasm_str[i] == "]":
-                TK.Token.append((TK_OPERATOR, 0, 0, 1, TK.qasm_str[i]))
+                TK.Token.append((TK_OPERATOR, 0, 0, 1, TK.qasm_str[i], TK.line_count, TK.err_line_idx, i))
                 i += 1
                 continue
             
             # Check for pi
             if TK.qasm_str[i] == "p" and TK.qasm_str[i+1] == "i":
                 if TK.qasm_str[i+2] == "," or TK.qasm_str[i+2] == ")":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "pi"))
+                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "pi", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for sin
             if TK.qasm_str[i] == "s" and TK.qasm_str[i+1] == "i" and TK.qasm_str[i+2] == "n":
                 if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "sin"))
+                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "sin", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for cos
             if TK.qasm_str[i] == "c" and TK.qasm_str[i+1] == "o" and TK.qasm_str[i+2] == "s":
                 if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "cos"))
+                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "cos", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for tan
             if TK.qasm_str[i] == "t" and TK.qasm_str[i+1] == "a" and TK.qasm_str[i+2] == "n":
                 if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "tan"))
+                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "tan", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for exp
             if TK.qasm_str[i] == "e" and TK.qasm_str[i+1] == "x" and TK.qasm_str[i+2] == "p":
                 if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "exp"))
+                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "exp", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for ln
             if TK.qasm_str[i] == "l" and TK.qasm_str[i+1] == "n":
                 if TK.qasm_str[i+2] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "ln"))
+                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "ln", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for sqrt
             if TK.qasm_str[i] == "s" and TK.qasm_str[i+1] == "q" and TK.qasm_str[i+2] == "r" and TK.qasm_str[i+3] == "t":
                 if TK.qasm_str[i+4] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 4, "sqrt"))
+                    TK.Token.append((TK_OPERATOR, 0, 0, 4, "sqrt", TK.line_count, TK.err_line_idx, i))
                     i += 4
                     continue
             
             # Check for gate
             if TK.qasm_str[i] == "g" and TK.qasm_str[i+1] == "a" and TK.qasm_str[i+2] == "t" and TK.qasm_str[i+4] == "e":
                 if TK.qasm_str[i+5].isspace():
-                    TK.Token.append((TK_GATE, 0, 0, 4, "gate"))
+                    TK.Token.append((TK_GATE, 0, 0, 4, "gate", TK.line_count, TK.err_line_idx, i))
                     i += 4
                     continue
             
             # Check for measure 
             if TK.qasm_str[i] == "m" and TK.qasm_str[i+1] == "e" and TK.qasm_str[i+2] == "a" and TK.qasm_str[i+3] == "s" and TK.qasm_str[i+4] == "u" and TK.qasm_str[i+5] == "r" and TK.qasm_str[i+6] == "e":
                 if TK.qasm_str[i+7].isspace():
-                    TK.Token.append((TK_MEASURE, 0, 0, 7, "measure"))
+                    TK.Token.append((TK_MEASURE, 0, 0, 7, "measure", TK.line_count, TK.err_line_idx, i))
                     i += 7
                     continue
             
             # Check for if
             if TK.qasm_str[i] == "i" and TK.qasm_str[i+1] == "f":
                 if TK.qasm_str[i+2].isspace() or TK.qasm_str[i+2] == "(":
-                    TK.Token.append((TK_IF, 0, 0, 2, "if"))
+                    TK.Token.append((TK_IF, 0, 0, 2, "if", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for reset
             if TK.qasm_str[i] == "r" and TK.qasm_str[i+1] == "e" and TK.qasm_str[i+2] == "s" and TK.qasm_str[i+3] == "e" and TK.qasm_str[i+4] == "t":
                 if TK.qasm_str[i+5].isspace():
-                    TK.Token.append((TK_RESET, 0, 0, 5, "reset"))
+                    TK.Token.append((TK_RESET, 0, 0, 5, "reset", TK.line_count, TK.err_line_idx, i))
                     i += 5
                     continue
             
             # Check for barrier
             if TK.qasm_str[i] == "b" and TK.qasm_str[i+1] == "a" and TK.qasm_str[i+2] == "r" and TK.qasm_str[i+3] == "r" and TK.qasm_str[i+4] == "i" and TK.qasm_str[i+5] == "e" and TK.qasm_str[i+6] == "r":
                 if TK.qasm_str[i+7].isspace():
-                    TK.Token.append((TK_BARRIER, 0, 0, 7, "barrier"))
+                    TK.Token.append((TK_BARRIER, 0, 0, 7, "barrier", TK.line_count, TK.err_line_idx, i))
                     i += 7
                     continue
             
             # Check for opaque
             if TK.qasm_str[i] == "o" and TK.qasm_str[i+1] == "p" and TK.qasm_str[i+2] == "a" and TK.qasm_str[i+3] == "q" and TK.qasm_str[i+4] == "u" and TK.qasm_str[i+5] == "e":
                 if TK.qasm_str[i+6].isspace():
-                    TK.Token.append((TK_OPAQUE, 0, 0, 6, "opaque"))
+                    TK.Token.append((TK_OPAQUE, 0, 0, 6, "opaque", TK.line_count, TK.err_line_idx, i))
                     i += 6
                     continue
             
             # Check for qreg
             if TK.qasm_str[i] == "q" and TK.qasm_str[i+1] == "r" and TK.qasm_str[i+2] == "e" and TK.qasm_str[i+3] == "g":
                 if TK.qasm_str[i+4].isspace():
-                    TK.Token.append((TK_QREG, 0, 0, 4, "qreg"))
+                    TK.Token.append((TK_QREG, 0, 0, 4, "qreg", TK.line_count, TK.err_line_idx, i))
                     i += 4
                     continue
             
             # Check for creg
             if TK.qasm_str[i] == "c" and TK.qasm_str[i+1] == "r" and TK.qasm_str[i+2] == "e" and TK.qasm_str[i+3] == "g":
                 if TK.qasm_str[i+4].isspace():
-                    TK.Token.append((TK_CREG, 0, 0, 4, "creg"))
+                    TK.Token.append((TK_CREG, 0, 0, 4, "creg", TK.line_count, TK.err_line_idx, i))
                     i += 4
                     continue
             
             # Check for U
             if TK.qasm_str[i] == "U":
                 if TK.qasm_str[i+1] == "(":
-                    TK.Token.append((TK_U, 0, 0, 1, "U"))
+                    TK.Token.append((TK_U, 0, 0, 1, "U", TK.line_count, TK.err_line_idx, i))
                     i += 1
                     continue
             
             # Check for X
             if TK.qasm_str[i] == "X":
                 if TK.qasm_str[i+1].isspace():
-                    TK.Token.append((TK_X, 0, 0, 1, "X"))
+                    TK.Token.append((TK_X, 0, 0, 1, "X", TK.line_count, TK.err_line_idx, i))
                     i += 1
                     continue
             
             # Check for Y
             if TK.qasm_str[i] == "Y":
                 if TK.qasm_str[i+1].isspace():
-                    TK.Token.append((TK_Y, 0, 0, 1, "Y"))
+                    TK.Token.append((TK_Y, 0, 0, 1, "Y", TK.line_count, TK.err_line_idx, i))
                     i += 1
                     continue
             
             # Check for Z
             if TK.qasm_str[i] == "Z":
                 if TK.qasm_str[i+1].isspace():
-                    TK.Token.append((TK_Z, 0, 0, 1, "Z"))
+                    TK.Token.append((TK_Z, 0, 0, 1, "Z", TK.line_count, TK.err_line_idx, i))
                     i += 1
                     continue
             
             # Check for S
             if TK.qasm_str[i] == "S":
                 if TK.qasm_str[i+1].isspace():
-                    TK.Token.append((TK_S, 0, 0, 1, "S"))
+                    TK.Token.append((TK_S, 0, 0, 1, "S", TK.line_count, TK.err_line_idx, i))
                     i += 1
                     continue
             
             # Check for T
             if TK.qasm_str[i] == "T":
                 if TK.qasm_str[i+1].isspace():
-                    TK.Token.append((TK_T, 0, 0, 1, "T"))
+                    TK.Token.append((TK_T, 0, 0, 1, "T", TK.line_count, TK.err_line_idx, i))
                     i += 1
                     continue
             
             # Check for Rtheta
             if TK.qasm_str[i] == "R" and TK.qasm_str[i+1] == "T" and TK.qasm_str[i+2] == "H" and TK.qasm_str[i+3] == "E" and TK.qasm_str[i+4] == "T" and TK.qasm_str[i+5] == "A":
                 if TK.qasm_str[i+6] == "(":
-                    TK.Token.append((TK_RTHETA, 0, 0, 6, "RTHETA"))
+                    TK.Token.append((TK_RTHETA, 0, 0, 6, "RTHETA", TK.line_count, TK.err_line_idx, i))
                     i += 6
                     continue
 
             # Check for RX
             if TK.qasm_str[i] == "R" and TK.qasm_str[i+1] == "X":
                 if TK.qasm_str[i+2] == "(":
-                    TK.Token.append((TK_RX, 0, 0, 2, "RX"))
+                    TK.Token.append((TK_RX, 0, 0, 2, "RX", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for RY
             if TK.qasm_str[i] == "R" and TK.qasm_str[i+1] == "Y":
                 if TK.qasm_str[i+2] == "(":
-                    TK.Token.append((TK_RY, 0, 0, 2, "RY"))
+                    TK.Token.append((TK_RY, 0, 0, 2, "RY", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for RZ
             if TK.qasm_str[i] == "R" and TK.qasm_str[i+1] == "Z":
                 if TK.qasm_str[i+2] == "(":
-                    TK.Token.append((TK_RZ, 0, 0, 2, "RZ"))
+                    TK.Token.append((TK_RZ, 0, 0, 2, "RZ", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for H
             if TK.qasm_str[i] == "H":
                 if TK.qasm_str[i+1].isspace():
-                    TK.Token.append((TK_H, 0, 0, 1, "H"))
+                    TK.Token.append((TK_H, 0, 0, 1, "H", TK.line_count, TK.err_line_idx, i))
                     i += 1
                     continue
             
             # Check for CX
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "X":
                 if TK.qasm_str[i+2].isspace():
-                    TK.Token.append((TK_CX, 0, 0, 2, "CX"))
+                    TK.Token.append((TK_CX, 0, 0, 2, "CX", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for CY
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "Y":
                 if TK.qasm_str[i+2].isspace():
-                    TK.Token.append((TK_CY, 0, 0, 2, "CY"))
+                    TK.Token.append((TK_CY, 0, 0, 2, "CY", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for CZ
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "Z":
                 if TK.qasm_str[i+2].isspace():
-                    TK.Token.append((TK_CZ, 0, 0, 2, "CZ"))
+                    TK.Token.append((TK_CZ, 0, 0, 2, "CZ", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for CU
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "U":
                 if TK.qasm_str[i+2] == "(":
-                    TK.Token.append((TK_CU, 0, 0, 2, "CU"))
+                    TK.Token.append((TK_CU, 0, 0, 2, "CU", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for CS
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "S":
                 if TK.qasm_str[i+2].isspace():
-                    TK.Token.append((TK_CS, 0, 0, 2, "CS"))
+                    TK.Token.append((TK_CS, 0, 0, 2, "CS", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for CT
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "T":
                 if TK.qasm_str[i+2].isspace():
-                    TK.Token.append((TK_CT, 0, 0, 2, "CT"))
+                    TK.Token.append((TK_CT, 0, 0, 2, "CT", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for CRtheta
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "R" and TK.qasm_str[i+2] == "T" and TK.qasm_str[i+3] == "H" and TK.qasm_str[i+4] == "E" and TK.qasm_str[i+5] == "T" and TK.qasm_str[i+6] == "A":
                 if TK.qasm_str[i+7] == "(":
-                    TK.Token.append((TK_CRTHETA, 0, 0, 7, "CRTHETA"))
+                    TK.Token.append((TK_CRTHETA, 0, 0, 7, "CRTHETA", TK.line_count, TK.err_line_idx, i))
                     i += 7
                     continue
             
             # Check for CRX
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "R" and TK.qasm_str[i+2] == "X":
                 if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_CRX, 0, 0, 3, "CRX"))
+                    TK.Token.append((TK_CRX, 0, 0, 3, "CRX", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for CRY
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "R" and TK.qasm_str[i+2] == "Y":
                 if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_CRY, 0, 0, 3, "CRY"))
+                    TK.Token.append((TK_CRY, 0, 0, 3, "CRY", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for CRZ
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "R" and TK.qasm_str[i+2] == "Z":
                 if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_CRZ, 0, 0, 3, "CRZ"))
+                    TK.Token.append((TK_CRZ, 0, 0, 3, "CRZ", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for CH
             if TK.qasm_str[i] == "C" and TK.qasm_str[i+1] == "H":
                 if TK.qasm_str[i+2].isspace():
-                    TK.Token.append((TK_CH, 0, 0, 2, "CH"))
+                    TK.Token.append((TK_CH, 0, 0, 2, "CH", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
@@ -373,7 +388,7 @@ class Token(object):
                 while TK.is_alnum(TK.qasm_str[i]) or TK.qasm_str[i].isdigit():
                     ident += TK.qasm_str[i]
                     i += 1
-                TK.Token.append((TK_IDENT, 0, 0, len(ident), ident))
+                TK.Token.append((TK_IDENT, 0, 0, len(ident), ident, TK.line_count, TK.err_line_idx, i))
                 continue
             
             # Check for number
@@ -402,7 +417,7 @@ class Token(object):
                             i += 1
                     else:
                         raise Exception("Invalid number")
-                TK.Token.append((TK_NUM, float(num), float(exp), i-i_init, TK.qasm_str[i_init:i]))
+                TK.Token.append((TK_NUM, float(num), float(exp), i-i_init, TK.qasm_str[i_init:i], TK.line_count, TK.err_line_idx, i))
                 continue
             
             # raise Exception("Invalid character, cannot Tokenize!")
@@ -427,7 +442,7 @@ class Token(object):
         string_init = "[line: "+str(line_idx)+"] "
         input_line = string_init + input_string[line_start:error_index+line_end]
         hat_line = " "*(len(string_init)+error_index-line_start) + Token.make_string_red("^")
-        err_line = " "*(len(string_init)+error_index-line_start) + Token.make_string_red(error_message)
+        err_line = " "*(len(string_init)+error_index-line_start) + Token.make_string_red(error_message+"!")
         # Combine and return the annotated string
         annotated_string = input_line + "\n" + hat_line + "\n" + err_line
         sys.exit(annotated_string)
@@ -436,5 +451,5 @@ class Token(object):
 filepath = "qsofinstr/check.qasm"
 str, TK = Token.Tokenize(filepath)
 # print(TK.qasm_str)
-print(str)
-# print(TK)
+# print(str)
+print(TK)
