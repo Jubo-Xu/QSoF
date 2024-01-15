@@ -7,6 +7,8 @@ ND_CREG = 2
 ND_OPAQUE = 3
 ND_IF = 4
 ND_EQUAL = 5
+ND_QREG_DEC = 6
+ND_CREG_DEC = 7
 
 class Node:
     def __init__(self, kind):
@@ -241,7 +243,7 @@ class Parser(Token):
         else:
             return self.qop()
     
-    # Recursive descent parsing for 'condition   := id == nninteger'
+    # Recursive descent parsing for 'condition := id == nninteger'
     def condition(self):
         if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
             if self.check_operator_str(self.token_idx, ")"):
@@ -253,3 +255,77 @@ class Parser(Token):
         condition_rhs = self.create_node_num(self.token[self.token_idx][self.val_idx])
         node_condition = Parser.create_node(ND_EQUAL, condition_lhs, condition_rhs)
         return node_condition
+    
+    # Recursive descent parsing for 'decl := qreg id [nninteger] ; | creg id [nninteger] ;'
+    def decl(self):
+        # Recursive descent parsing for 'qreg id [nninteger] ;'
+        if self.check_TK_kind(self.token_idx) == token.TK_QREG:
+            self.token_idx += 1
+            # Check whether the qreg name is missing or wrong type is used
+            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.token_idx, "["):
+                    self.error_at(self.token_idx, "The qreg name is missing")
+                else:
+                    self.error_at(self.token_idx, "The qreg name cannot be this type")
+            # Check whether the qreg name is already defined
+            if self.token[self.token_idx][self.str_idx] in self.qregs:
+                self.error_at(self.token_idx, "qreg "+self.token[self.token_idx][self.str_idx]+" already defined")
+            name = self.token[self.token_idx][self.str_idx]
+            self.token_idx += 1
+            self.expect("[")
+            # Check whether the qreg size is missing or wrong type is used
+            if self.check_TK_kind(self.token_idx) != token.TK_NUM:
+                if self.check_operator_str(self.token_idx, "]"):
+                    self.error_at(self.token_idx, "The qreg size is missing")
+                else:
+                    self.error_at(self.token_idx, "The qreg size should be a number")
+            # Check whether the qreg size is an integer
+            if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
+                self.error_at(self.token_idx, "The qreg size should be an integer")
+            size = int(self.token[self.token_idx][self.val_idx])
+            self.qregs[name] = size
+            self.expect("]")
+            self.expect(";")
+            node_decl = Parser.create_node(ND_QREG_DEC)
+            node_decl.add_str(name)
+            return node_decl
+        # Recursive descent parsing for 'creg id [nninteger] ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_CREG:
+            self.token_idx += 1
+            # Check whether the creg name is missing or wrong type is used
+            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.token_idx, "["):
+                    self.error_at(self.token_idx, "The creg name is missing")
+                else:
+                    self.error_at(self.token_idx, "The creg name cannot be this type")
+            # Check whether the creg name is already defined
+            if self.token[self.token_idx][self.str_idx] in self.cregs:
+                self.error_at(self.token_idx, "creg "+self.token[self.token_idx][self.str_idx]+" already defined")
+            name = self.token[self.token_idx][self.str_idx]
+            self.token_idx += 1
+            self.expect("[")
+            # Check whether the creg size is missing or wrong type is used
+            if self.check_TK_kind(self.token_idx) != token.TK_NUM:
+                if self.check_operator_str(self.token_idx, "]"):
+                    self.error_at(self.token_idx, "The creg size is missing")
+                else:
+                    self.error_at(self.token_idx, "The creg size should be a number")
+            # Check whether the creg size is an integer
+            if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
+                self.error_at(self.token_idx, "The creg size should be an integer")
+            size = int(self.token[self.token_idx][self.val_idx])
+            self.qregs[name] = size
+            self.expect("]")
+            self.expect(";")
+            node_decl = Parser.create_node(ND_CREG_DEC)
+            node_decl.add_str(name)
+            return node_decl
+        # Check for some errors
+        else:
+            if self.check_operator_str(self.token_idx, ";"):
+                self.error_at(self.token_idx, "The declaration cannot be empty")
+            elif self.check_operator_str(self.token_idx, "["):
+                self.error_at(self.token_idx, "The qreg name cannot be empty")
+            else:
+                self.error_at(self.token_idx, "The declaration cannot be this type")
+            
