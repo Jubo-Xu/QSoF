@@ -454,5 +454,29 @@ class Parser(Token):
     def argument(self):
         # Check whether the argument is identifier
         if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-            self.error_at(self.token_idx, "The argument should be an identifier")
-        
+            self.error_at(self.token_idx, "The qreg argument should be an identifier")
+        # Check whether the argument is already defined 
+        if not self.token[self.token_idx][self.str_idx] in self.qregs:
+            self.error_at(self.token_idx, "qreg "+self.token[self.token_idx][self.str_idx]+" not defined")
+        name = self.token[self.token_idx][self.str_idx]
+        self.token_idx += 1
+        # Check whether the argument is indexed
+        if self.check_operator_str(self.token_idx, "["):
+            # Check whether the qreg size is missing or wrong type is used
+            self.token_idx += 1
+            if self.check_TK_kind(self.token_idx) != token.TK_NUM:
+                if self.check_operator_str(self.token_idx, "]"):
+                    self.error_at(self.token_idx, "There has to be a number for the qreg index")
+                else:
+                    self.error_at(self.token_idx, "The qreg index should be a number")
+            # Check whether the qreg size is an integer
+            if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
+                self.error_at(self.token_idx, "The qreg size should be an integer")
+            index = int(self.token[self.token_idx][self.val_idx])
+            node_argument = Parser.create_node_qreg((name, index))
+            self.expect("]")
+            return node_argument
+        else:
+            node_argument = Parser.create_node_qreg((name, -1))
+            return node_argument
+            
