@@ -433,4 +433,6 @@ class Parser(Token):
             self.expect(";")
             node_qof = Parser.create_node(ND_MEASURE, node_lhs, node_rhs)
             return node_qof
+        else:
+            return self.uop()
     
