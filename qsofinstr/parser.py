@@ -479,4 +479,34 @@ class Parser(Token):
         else:
             node_argument = Parser.create_node_qreg((name, -1))
             return node_argument
+    
+    # Recursive descent parsing for 'argument_c := id | id [nninteger]'
+    def argument_c(self):
+        # Check whether the argument is identifier
+        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+            self.error_at(self.token_idx, "The creg argument should be an identifier")
+        # Check whether the argument is already defined 
+        if not self.token[self.token_idx][self.str_idx] in self.cregs:
+            self.error_at(self.token_idx, "creg "+self.token[self.token_idx][self.str_idx]+" not defined")
+        name = self.token[self.token_idx][self.str_idx]
+        self.token_idx += 1
+        # Check whether the argument is indexed
+        if self.check_operator_str(self.token_idx, "["):
+            # Check whether the creg size is missing or wrong type is used
+            self.token_idx += 1
+            if self.check_TK_kind(self.token_idx) != token.TK_NUM:
+                if self.check_operator_str(self.token_idx, "]"):
+                    self.error_at(self.token_idx, "There has to be a number for the creg index")
+                else:
+                    self.error_at(self.token_idx, "The creg index should be a number")
+            # Check whether the creg size is an integer
+            if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
+                self.error_at(self.token_idx, "The creg size should be an integer")
+            index = int(self.token[self.token_idx][self.val_idx])
+            node_argument = Parser.create_node_creg((name, index))
+            self.expect("]")
+            return node_argument
+        else:
+            node_argument = Parser.create_node_creg((name, -1))
+            return node_argument
             
