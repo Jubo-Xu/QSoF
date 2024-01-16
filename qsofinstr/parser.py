@@ -11,6 +11,7 @@ ND_QREG_DEC = 6
 ND_CREG_DEC = 7
 ND_GATE_DEC = 8
 ND_MEASURE = 9
+ND_RESET = 10
 
 class Node:
     def __init__(self, kind):
@@ -149,7 +150,7 @@ class Parser(Token):
     goplist     := uop 
                    | goplist uop 
     qop         := uop 
-                   | measure argument -> argument ;
+                   | measure argument -> argument_c ;
                    | reset argument ;
     uop         := U (explist) argument ;
                    | CX argument , argument ;
@@ -180,6 +181,7 @@ class Parser(Token):
     mixedlist   := id [nninteger] | mixedlist , id
                    | mixedlist, id [nninteger]
                    | idlist , id [nninteger]
+    argument_c  := id | id [nninteger]
     argument    := id | id [nninteger]
     explist     := exp | explist , exp
     exp         := real | nninteger | pi | id
@@ -409,30 +411,48 @@ class Parser(Token):
         node_gatedecl.add_str(name)
         return node_gatedecl
                 
-    # Recursive descent parsing for 'qop := uop | measure argument -> argument ;'
+    # Recursive descent parsing for 'qop := uop | measure argument -> argument ; | reset argument ;'
     def qop(self):
+        # Recursive descent parsing for 'measure argument -> argument ;'
         if self.check_TK_kind(self.token_idx) == token.TK_MEASURE:
             self.token_idx += 1
             # Check whether the argument is missing or wrong type is used 
             if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
                 if self.check_operator_str(self.token_idx, "->"):
-                    self.error_at(self.token_idx, "The argument is missing")
+                    self.error_at(self.token_idx, "The qreg argument is missing")
                 elif self.check_operator_str(self.token_idx, ";"):
-                    self.error_at(self.token_idx, "The argument and the destination are missing")
+                    self.error_at(self.token_idx, "The qreg argument and the destination are missing")
                 else:
-                    self.error_at(self.token_idx, "The argument cannot be this type")
+                    self.error_at(self.token_idx, "The qreg argument cannot be this type")
             node_lhs = self.argument()
             self.expect("->")
             # Check whether the destination is missing or wrong type is used
             if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
                 if self.check_operator_str(self.token_idx, ";"):
-                    self.error_at(self.token_idx, "The destination is missing")
+                    self.error_at(self.token_idx, "The creg destination is missing")
                 else:
-                    self.error_at(self.token_idx, "The destination cannot be this type")
-            node_rhs = self.argument()
+                    self.error_at(self.token_idx, "The creg destination cannot be this type")
+            node_rhs = self.argument_c()
             self.expect(";")
             node_qof = Parser.create_node(ND_MEASURE, node_lhs, node_rhs)
+            return node_qof
+        elif self.check_TK_kind(self.token_idx) == token.TK_RESET:
+            self.token_idx += 1
+            # Check whether the argument is missing or wrong type is used
+            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.token_idx, ";"):
+                    self.error_at(self.token_idx, "The qreg argument is missing")
+                else:
+                    self.error_at(self.token_idx, "The qreg argument cannot be this type")
+            node_lhs = self.argument()
+            node_qof = Parser.create_node(ND_RESET, node_lhs)
             return node_qof
         else:
             return self.uop()
     
+    # Recursive descent parsing for 'argument := id | id [nninteger]'
+    def argument(self):
+        # Check whether the argument is identifier
+        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+            self.error_at(self.token_idx, "The argument should be an identifier")
+        
