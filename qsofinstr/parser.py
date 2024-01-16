@@ -9,6 +9,7 @@ ND_IF = 4
 ND_EQUAL = 5
 ND_QREG_DEC = 6
 ND_CREG_DEC = 7
+ND_GATE_DEC = 8
 
 class Node:
     def __init__(self, kind):
@@ -47,6 +48,28 @@ class Opaque:
         else:
             self.params.append(arg)
 
+class Gate:
+    def __init__(self, name):
+        self.name = name
+        self.params = []
+        self.args = []
+        self.contents = []
+    
+    def add_params(self, param):
+        if isinstance(param, list):
+            self.params.extend(param)
+        else:
+            self.params.append(param)
+    
+    def add_args(self, arg):
+        if isinstance(arg, list):
+            self.args.extend(arg)
+        else:
+            self.params.append(arg)
+    
+    def add_contents(self, content_node):
+        self.contents.append(content_node)
+
 class Parser(Token):
     def __init__(self, TK, file_str):
         super().__init__()
@@ -59,6 +82,7 @@ class Parser(Token):
         self.opaques = {}
         self.qregs = {}
         self.cregs = {}
+        self.gates = {}
         
     @staticmethod
     def create_node(kind, leftnode=None, rightnode=None):
@@ -328,4 +352,61 @@ class Parser(Token):
                 self.error_at(self.token_idx, "The qreg name cannot be empty")
             else:
                 self.error_at(self.token_idx, "The declaration cannot be this type")
-            
+    
+    # Recursive descent parsing for 'gatedecl := gate id idlist {goplist}|gate id () idlist {goplist}|gate id (idlist) idlist {goplist}'
+    def gatedecl(self):
+        # Check whether the gate keyword is missing
+        if self.check_TK_kind(self.token_idx) != token.TK_GATE:
+            self.error_at(self.token_idx, "The gate keyword is missing")
+        self.token_idx += 1
+        # Check whether the gate name is missing or wrong type is used 
+        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+            if self.check_operator_str(self.token_idx, "("):
+                self.error_at(self.token_idx, "The gate name is missing")
+            elif self.check_operator_str(self.token_idx, "{") or self.check_operator_str(self.token_idx, ";"):
+                self.error_at(self.token_idx, "The gate name and the arguments are missing")
+            else:
+                self.error_at(self.token_idx, "The gate name cannot be this type")
+        if self.check_TK_kind(self.token_idx) == token.TK_IDENT and self.check_operator_str(self.token_idx+1, ","):
+            self.error_at(self.token_idx, "The gate name is missing")
+        # Check whether the gate is already defined 
+        if self.token[self.token_idx][self.str_idx] in self.gates:
+            self.error_at(self.token_idx, "gate "+self.token[self.token_idx][self.str_idx]+" already defined")
+        name = self.token[self.token_idx][self.str_idx]
+        self.token_idx += 1
+        if self.check_operator_str(self.token_idx, "("):
+            self.token_idx += 1
+            params = []
+            # Check for empty parameters
+            if self.check_operator_str(self.token_idx, ")"):
+                self.token_idx += 1
+            # Check for nonempty parameters
+            if self.check_TK_kind(self.token_idx) == token.TK_IDENT:
+                params.extend(self.idlist())
+            # Check for some errors 
+            if self.check_TK_kind(self.token_idx) != token.TK_IDENT and not self.check_operator_str(self.token_idx, ")"):
+                self.error_at(self.token_idx, "The parameters should be identifiers")
+            self.expect(")")
+        # Check whether the arguments are missing or wrong type is used
+        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+            if self.check_operator_str(self.token_idx, "{"):
+                self.error_at(self.token_idx, "The arguments are missing")
+            elif self.check_operator_str(self.token_idx, ";"):
+                self.error_at(self.token_idx, "The arguments and the contents are missing")
+            else:
+                self.error_at(self.token_idx, "The arguments cannot be this type")
+        args = self.idlist()
+        self.expect("{")
+        gate_val = Gate(name)
+        while not self.check_operator_str(self.token_idx, "}"):
+            gate_val.add_contents(self.uop())
+        self.expect("}")
+        gate_val.add_params(params)
+        gate_val.add_args(args)
+        self.gates[name] = gate_val
+        node_gatedecl = Parser.create_node(ND_GATE_DEC)
+        node_gatedecl.add_str(name)
+        return node_gatedecl
+                
+        
+        
