@@ -10,6 +10,7 @@ ND_EQUAL = 5
 ND_QREG_DEC = 6
 ND_CREG_DEC = 7
 ND_GATE_DEC = 8
+ND_MEASURE = 9
 
 class Node:
     def __init__(self, kind):
@@ -408,5 +409,28 @@ class Parser(Token):
         node_gatedecl.add_str(name)
         return node_gatedecl
                 
-        
-        
+    # Recursive descent parsing for 'qop := uop | measure argument -> argument ;'
+    def qop(self):
+        if self.check_TK_kind(self.token_idx) == token.TK_MEASURE:
+            self.token_idx += 1
+            # Check whether the argument is missing or wrong type is used 
+            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.token_idx, "->"):
+                    self.error_at(self.token_idx, "The argument is missing")
+                elif self.check_operator_str(self.token_idx, ";"):
+                    self.error_at(self.token_idx, "The argument and the destination are missing")
+                else:
+                    self.error_at(self.token_idx, "The argument cannot be this type")
+            node_lhs = self.argument()
+            self.expect("->")
+            # Check whether the destination is missing or wrong type is used
+            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.token_idx, ";"):
+                    self.error_at(self.token_idx, "The destination is missing")
+                else:
+                    self.error_at(self.token_idx, "The destination cannot be this type")
+            node_rhs = self.argument()
+            self.expect(";")
+            node_qof = Parser.create_node(ND_MEASURE, node_lhs, node_rhs)
+            return node_qof
+    
