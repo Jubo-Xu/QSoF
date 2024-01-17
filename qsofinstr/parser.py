@@ -12,6 +12,28 @@ ND_CREG_DEC = 7
 ND_GATE_DEC = 8
 ND_MEASURE = 9
 ND_RESET = 10
+ND_U = 11
+ND_CX = 12
+ND_X = 13
+ND_Y = 14
+ND_Z = 15
+ND_S = 16
+ND_T = 17
+ND_RTHETA = 18
+ND_RX = 19
+ND_RY = 20
+ND_RZ = 21
+ND_H = 22
+ND_CY = 23 
+ND_CZ = 24
+ND_CU = 25
+ND_CS = 26
+ND_CT = 27
+ND_CRTHETA = 28
+ND_CRX = 29
+ND_CRY = 30
+ND_CRZ = 31
+ND_CH = 32
 
 class Node:
     def __init__(self, kind):
@@ -22,6 +44,7 @@ class Node:
         self.cregs = []
         self.left = None
         self.right = None
+        self.controlled = False
     
     def add_str(self, str):
         self.str = str
@@ -71,6 +94,7 @@ class Gate:
     
     def add_contents(self, content_node):
         self.contents.append(content_node)
+
 
 class Parser(Token):
     def __init__(self, TK, file_str):
@@ -509,4 +533,173 @@ class Parser(Token):
         else:
             node_argument = Parser.create_node_creg((name, -1))
             return node_argument
-            
+    
+    '''Recursive descent parsing for 
+        uop     := U (explist) argument ;
+                   | CX argument , argument ;
+                   | X argument ;
+                   | Y argument ;
+                   | Z argument ;
+                   | S argument ;
+                   | T argument ;
+                   | RTHETA (explist) argument ;
+                   | RX (explist) argument
+                   | RY (explist) argument
+                   | RZ (explist) argument
+                   | H argument ;
+                   | CY argument, argument ;
+                   | CZ argument, argument ;
+                   | CU (explist) argument, argument ;
+                   | CS argument, argument ;
+                   | CT argument, argument ;
+                   | CRTHETA (explist) argument, argument ;
+                   | CRX (explist) argument, argument ;
+                   | CRY (explist) argument, argument ;
+                   | CRZ (explist) argument, argument ;
+                   | CH argument, arugment ;
+                   | id anylist ; | id () anylist ;
+                   | id (explist) anylist ;'''
+    
+    def uop_with_explist_single(self, kind, name):
+        self.token_idx += 1
+        self.expect("(")
+        # Check whether the explist is missing
+        if self.check_operator_str(self.token_idx, ")"):
+            self.error_at(self.token_idx, "The explist of "+name+" is missing")
+        explist = self.explist()
+        self.expect(")")
+        # Check whether the argument is missing
+        if self.check_operator_str(self.token_idx, ";"):
+            self.error_at(self.token_idx, "The argument of "+name+" is missing")
+        argument = self.argument()
+        self.expect(";")
+        node_uop = Parser.create_node(kind, explist, argument)
+        return node_uop
+    
+    def uop_without_explist_single(self, kind, name):
+        self.token_idx += 1
+        # Check whether the argument is missing
+        if self.check_operator_str(self.token_idx, ";"):
+            self.error_at(self.token_idx, "The argument of"+name+"is missing")
+        argument = self.argument()
+        self.expect(";")
+        node_uop = Parser.create_node(kind, argument)
+        return node_uop
+    
+    def uop_without_explist_controlled(self, kind, name):
+        self.token_idx += 1
+        # Check whether the first argument is missing
+        if self.check_operator_str(self.token_idx, ","):
+            self.error_at(self.token_idx, "The first argument of "+name+" is missing")
+        argument_lhs = self.argument()
+        argument_lhs.controlled = True
+        self.expect(",")
+        # Check whether the second argument is missing
+        if self.check_operator_str(self.token_idx, ";"):
+            self.error_at(self.token_idx, "The second argument of "+name+" is missing")
+        argument_rhs = self.argument()
+        self.expect(";")
+        node_uop = Parser.create_node(kind, argument_lhs, argument_rhs)
+        return node_uop
+    
+    def uop_with_explist_controlled(self, kind, name):
+        self.token_idx += 1
+        self.expect("(")
+        # Check whether the explist is missing
+        if self.check_operator_str(self.token_idx, ")"):
+            self.error_at(self.token_idx, "The explist of "+name+" is missing")
+        explist = self.explist()
+        self.expect(")")
+        # Check whether the first argument is missing
+        if self.check_operator_str(self.token_idx, ","):
+            self.error_at(self.token_idx, "The first argument of "+name+" is missing")
+        argument_control = self.argument()
+        argument_control.controlled = True
+        self.expect(",")
+        # Check whether the second argument is missing
+        if self.check_operator_str(self.token_idx, ";"):
+            self.error_at(self.token_idx, "The second argument of "+name+" is missing")
+        argument_target = self.argument()
+        self.expect(";")
+        argument_control.add_left(argument_target)
+        node_uop = Parser.create_node(kind, explist, argument_control)
+        return node_uop
+    
+    def uop(self):
+        # Recursive descent parsing for 'U (explist) argument ;'
+        if self.check_TK_kind(self.token_idx) == token.TK_U:
+            node_uop = self.uop_with_explist_single(ND_U, "U")
+            return node_uop
+        # Recursive descent parsing for 'CX argument , argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_CX:
+            node_uop = self.uop_without_explist_controlled(ND_CX, "CX")
+            return node_uop
+        # Recursive descent parsing for 'X argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_X:
+            node_uop = self.uop_without_explist_single(ND_X, "X")
+            return node_uop
+        # Recursive descent parsing for 'Y argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_Y:
+            node_uop = self.uop_without_explist_single(ND_Y, "Y")
+            return node_uop
+        # Recursive descent parsing for 'Z argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_Z:
+            node_uop = self.uop_without_explist_single(ND_Z, "Z")
+            return node_uop
+        # Recursive descent parsing for 'S argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_S:
+            node_uop = self.uop_without_explist_single(ND_S, "S")   
+            return node_uop
+        # Recursive descent parsing for 'T argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_T:
+            node_uop = self.uop_without_explist_single(ND_T, "T")
+            return node_uop
+        # Recursive descent parsing for 'RTHETA (explist) argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_RTHETA:
+            node_uop = self.uop_with_explist_single(ND_RTHETA, "RTHETA")
+            return node_uop
+        # Recursive descent parsing for 'RX (explist) argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_RX:
+            node_uop = self.uop_with_explist_single(ND_RX, "RX")
+            return node_uop
+        # Recursive descent parsing for 'RY (explist) argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_RY:
+            node_uop = self.uop_with_explist_single(ND_RY, "RY")
+            return node_uop
+        # Recursive descent parsing for 'RZ (explist) argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_RZ:
+            node_uop = self.uop_with_explist_single(ND_RZ, "RZ")
+            return node_uop
+        # Recursive descent parsing for 'H argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_H:
+            node_uop = self.uop_without_explist_single(ND_H, "H")
+            return node_uop
+        # Recursive descent parsing for 'CY argument, argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_CY:
+            node_uop = self.uop_without_explist_controlled(ND_CY, "CY")
+            return node_uop
+        # Recursive descent parsing for 'CZ argument, argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_CZ:
+            node_uop = self.uop_without_explist_controlled(ND_CZ, "CZ")
+            return node_uop
+        # Recursive descent parsing for 'CU (explist) argument, argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_CU:
+            node_uop = self.uop_with_explist_controlled(ND_CU, "CU")
+            return node_uop
+        # Recursive descent parsing for 'CS argument, argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_CS:
+            node_uop = self.uop_without_explist_controlled(ND_CS, "CS")
+            return node_uop
+        # Recursive descent parsing for 'CT argument, argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_CT:
+            node_uop = self.uop_without_explist_controlled(ND_CT, "CT")
+            return node_uop
+        # Recursive descent parsing for 'CRTHETA (explist) argument, argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_CRTHETA:
+            node_uop = self.uop_with_explist_controlled(ND_CRTHETA, "CRTHETA")
+            return node_uop
+        # Recursive descent parsing for 'CRX (explist) argument, argument ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_CRX:
+            node_uop = self.uop_with_explist_controlled(ND_CRX, "CRX")
+            return node_uop
+        
