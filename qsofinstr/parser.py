@@ -166,6 +166,17 @@ class Parser(Token):
     def error_at(self, idx, message):
         Token.annotate_error(self.input_str, self.token[idx][self.idx_idx], message, self.token[idx][self.line_idx], self.token[idx][self.err_line_idx])
     
+    def check_num_error(self, name):
+        # Check whether the qreg or creg size is missing or wrong type is used
+        if self.check_TK_kind(self.token_idx) != token.TK_NUM:
+            if self.check_operator_str(self.token_idx, "]"):
+                self.error_at(self.token_idx, "There has to be a number for the "+name)
+            else:
+                self.error_at(self.token_idx, "The "+name+" should be a number")
+        # Check whether the qreg or creg size is an integer
+        if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
+            self.error_at(self.token_idx, "The "+name+" should be an integer")
+    
     ### Recursive descent parsing ###
     ''' BNF of modified OpenQASM
     mainprogram := OPENQASM real; program
@@ -331,15 +342,16 @@ class Parser(Token):
             name = self.token[self.token_idx][self.str_idx]
             self.token_idx += 1
             self.expect("[")
-            # Check whether the qreg size is missing or wrong type is used
-            if self.check_TK_kind(self.token_idx) != token.TK_NUM:
-                if self.check_operator_str(self.token_idx, "]"):
-                    self.error_at(self.token_idx, "The qreg size is missing")
-                else:
-                    self.error_at(self.token_idx, "The qreg size should be a number")
-            # Check whether the qreg size is an integer
-            if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
-                self.error_at(self.token_idx, "The qreg size should be an integer")
+            # # Check whether the qreg size is missing or wrong type is used
+            # if self.check_TK_kind(self.token_idx) != token.TK_NUM:
+            #     if self.check_operator_str(self.token_idx, "]"):
+            #         self.error_at(self.token_idx, "The qreg size is missing")
+            #     else:
+            #         self.error_at(self.token_idx, "The qreg size should be a number")
+            # # Check whether the qreg size is an integer
+            # if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
+            #     self.error_at(self.token_idx, "The qreg size should be an integer")
+            self.check_num_error("qreg size")
             size = int(self.token[self.token_idx][self.val_idx])
             self.qregs[name] = size
             self.expect("]")
@@ -362,15 +374,16 @@ class Parser(Token):
             name = self.token[self.token_idx][self.str_idx]
             self.token_idx += 1
             self.expect("[")
-            # Check whether the creg size is missing or wrong type is used
-            if self.check_TK_kind(self.token_idx) != token.TK_NUM:
-                if self.check_operator_str(self.token_idx, "]"):
-                    self.error_at(self.token_idx, "The creg size is missing")
-                else:
-                    self.error_at(self.token_idx, "The creg size should be a number")
-            # Check whether the creg size is an integer
-            if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
-                self.error_at(self.token_idx, "The creg size should be an integer")
+            # # Check whether the creg size is missing or wrong type is used
+            # if self.check_TK_kind(self.token_idx) != token.TK_NUM:
+            #     if self.check_operator_str(self.token_idx, "]"):
+            #         self.error_at(self.token_idx, "The creg size is missing")
+            #     else:
+            #         self.error_at(self.token_idx, "The creg size should be a number")
+            # # Check whether the creg size is an integer
+            # if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
+            #     self.error_at(self.token_idx, "The creg size should be an integer")
+            self.check_num_error("creg size")
             size = int(self.token[self.token_idx][self.val_idx])
             self.qregs[name] = size
             self.expect("]")
@@ -495,14 +508,15 @@ class Parser(Token):
         if self.check_operator_str(self.token_idx, "["):
             # Check whether the qreg size is missing or wrong type is used
             self.token_idx += 1
-            if self.check_TK_kind(self.token_idx) != token.TK_NUM:
-                if self.check_operator_str(self.token_idx, "]"):
-                    self.error_at(self.token_idx, "There has to be a number for the qreg index")
-                else:
-                    self.error_at(self.token_idx, "The qreg index should be a number")
-            # Check whether the qreg size is an integer
-            if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
-                self.error_at(self.token_idx, "The qreg size should be an integer")
+            # if self.check_TK_kind(self.token_idx) != token.TK_NUM:
+            #     if self.check_operator_str(self.token_idx, "]"):
+            #         self.error_at(self.token_idx, "There has to be a number for the qreg index")
+            #     else:
+            #         self.error_at(self.token_idx, "The qreg index should be a number")
+            # # Check whether the qreg size is an integer
+            # if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
+            #     self.error_at(self.token_idx, "The qreg size should be an integer")
+            self.check_num_error("qreg index")
             index = int(self.token[self.token_idx][self.val_idx])
             node_argument = Parser.create_node_qreg((name, index))
             self.expect("]")
@@ -525,14 +539,15 @@ class Parser(Token):
         if self.check_operator_str(self.token_idx, "["):
             # Check whether the creg size is missing or wrong type is used
             self.token_idx += 1
-            if self.check_TK_kind(self.token_idx) != token.TK_NUM:
-                if self.check_operator_str(self.token_idx, "]"):
-                    self.error_at(self.token_idx, "There has to be a number for the creg index")
-                else:
-                    self.error_at(self.token_idx, "The creg index should be a number")
-            # Check whether the creg size is an integer
-            if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
-                self.error_at(self.token_idx, "The creg size should be an integer")
+            # if self.check_TK_kind(self.token_idx) != token.TK_NUM:
+            #     if self.check_operator_str(self.token_idx, "]"):
+            #         self.error_at(self.token_idx, "There has to be a number for the creg index")
+            #     else:
+            #         self.error_at(self.token_idx, "The creg index should be a number")
+            # # Check whether the creg size is an integer
+            # if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
+            #     self.error_at(self.token_idx, "The creg size should be an integer")
+            self.check_num_error("creg index")
             index = int(self.token[self.token_idx][self.val_idx])
             node_argument = Parser.create_node_creg((name, index))
             self.expect("]")
@@ -771,5 +786,32 @@ class Parser(Token):
                 self.error_at(self.token_idx, "The gate operation cannot be empty")
             else:
                 self.error_at(self.token_idx, "The gate operation cannot be this type")
+    
+    # Recursive descent parsing for 'idlist := id | id [nninteger], idlist'
+    def id_check(self, qreglist):
+        # Check whether the argument is identifier
+        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+            self.error_at(self.token_idx, "The type should be identifier")
+        # Check whether the qreg is already defined
+        if not self.token[self.token_idx][self.str_idx] in self.qregs:
+            self.error_at(self.token_idx, "qreg "+self.token[self.token_idx][self.str_idx]+" not defined")
+        name = self.token[self.token_idx][self.str_idx]
+        self.token_idx += 1
+        # Check whether the argument is indexed
+        if self.check_operator_str(self.token_idx, "["):
+            self.token_idx += 1
+            self.check_num_error("qreg index")
+            idx = int(self.token[self.token_idx][self.val_idx])
+            self.expect("]")
+            qreglist.append((name, idx))
+        else:
+            qreglist.append((name, -1))
         
-        
+    def idlist(self):
+        qreglist = []
+        self.id_check(qreglist)
+        while not self.check_operator_str(self.token_idx, ";"):
+            self.expect(",")
+            self.id_check(qreglist)
+        node_idlist = Parser.create_node_qreg(qreglist)
+        return node_idlist
