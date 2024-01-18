@@ -49,6 +49,7 @@ ND_LN = 44
 ND_SQRT = 45
 ND_PI = 46
 ND_IDENT = 47
+ND_EXP_LIST = 48
 
 # Dictionary for binary operator precedences
 binop_precedence = {
@@ -171,6 +172,12 @@ class Parser(Token):
             node.cregs.append(creg)
         return node
     
+    @staticmethod
+    def create_node_explist(exp):
+        node = Explist(ND_EXP_LIST)
+        node.add_exps(exp)
+        return node
+    
     def expect(self, op):
         if self.token[self.token_idx][self.kind_idx] != token.TK_OPERATOR or self.token[self.token_idx][self.str_idx] != op:
             Token.annotate_error(self.input_str, self.token[self.token_idx][self.idx_idx], "missing operator: " + op, self.token[self.token_idx][self.line_idx], self.token[self.token_idx][self.err_line_idx])
@@ -262,6 +269,10 @@ class Parser(Token):
     nninteger   := [1-9]+[0-9]*|0
                    
     '''
+    #===========================================================================
+    # Define the AST and the recursive descent parsing
+    #===========================================================================
+    
     # First starting with the statement
     def statement(self):
         if self.check_TK_kind(self.token_idx) == token.TK_QREG or self.check_TK_kind(self.token_idx) == token.TK_CREG:
@@ -917,4 +928,77 @@ class Parser(Token):
             return node_primary
     
     # Operator precedence parsing for binaryop = exp "+" exp | exp "-" exp | exp "*" exp | exp "/" exp | exp "^" exp
+    
     # In this case, the precedences will be initialized as a dictionary
+    # Define the function to get the precedence of the current binary operator
+    def get_binaryop_precedence(self):
+        # Check whether the current token is an operator
+        if self.check_TK_kind(self.token_idx) != token.TK_OPERATOR:
+            self.error_at(self.token_idx, "This is not an operator")
+        # Check whether the current operator is supported
+        if self.token[self.token_idx][self.str_idx] not in binop_precedence:
+            self.error_at(self.token_idx, "This operator is not supported")
+        precedence = binop_precedence[self.token[self.token_idx][self.str_idx]]
+        return precedence
+    
+    # Define the function to get the node kind of the current binary operator
+    def get_binaryop(self):
+        # Since this function will only be used after the precedence check, the current token must be an operator supported, so no need to check error
+        if self.token[self.token_idx][self.str_idx] == "+":
+            self.token_idx += 1
+            return ND_ADD
+        elif self.token[self.token_idx][self.str_idx] == "-":
+            self.token_idx += 1
+            return ND_SUB
+        elif self.token[self.token_idx][self.str_idx] == "*":
+            self.token_idx += 1
+            return ND_MUL
+        elif self.token[self.token_idx][self.str_idx] == "/":
+            self.token_idx += 1
+            return ND_DIV
+        else:
+            self.token_idx += 1
+            return ND_POW
+    
+    # Define the function needed for recursively parsing the binaryop
+    def ParseBinaryopRHS(self, expr_prec, lhs):
+        # If this is a binary operator, find its precedence
+        while True:
+            # Get the precedence of the operator
+            prec = self.get_binaryop_precedence()
+            # If this is a binary operator that binds at least as tightly as the current binary operator, consume it, otherwise we are done
+            if prec < expr_prec:
+                return lhs
+            # Now this is a binary operator
+            binaryop = self.get_binaryop()
+            self.token_idx += 1
+            # Parse the expression after the binary operator
+            rhs = self.exp()
+            if rhs is None:
+                self.error_at(self.token_idx, "The expression after the binary operator cannot be empty")
+            # If this is a binary operator that binds less tightly with RHS than the operator after RHS, let the pending operator take RHS as its LHS
+            next_prec = self.get_binaryop_precedence()
+            if prec < next_prec:
+                rhs = self.ParseBinaryopRHS(prec+1, rhs)
+            # Merge lhs/RHS
+            lhs = Parser.create_node(binaryop, lhs, rhs)
+    
+    # Recursive descent parsing for binaryop
+    def binaryop(self):
+        # First parse the left hand side
+        lhs = self.exp()
+        if lhs is None:
+            self.error_at(self.token_idx, "The expression before the binary operator cannot be empty")
+        # Then parse the right hand side, the precedence of the first binary operator is 0
+        return self.ParseBinaryopRHS(0, lhs)
+    
+    # Recursive descent parsing for explist = exp | explist "," exp
+    def explist(self):
+        exp_list = []
+        exp_list.append(self.exp())
+        while self.check_operator_str(self.token_idx, ","):
+            self.expect(",")
+            exp_list.append(self.exp())
+        node_explist = Parser.create_node_explist(exp_list)
+        return node_explist
+    
