@@ -36,6 +36,28 @@ ND_CRZ = 31
 ND_CH = 32
 ND_GATE_NOEXP = 33
 ND_GATE_EXP = 34
+ND_SUB = 35
+ND_ADD = 36
+ND_MUL = 37
+ND_DIV = 38
+ND_POW = 39
+ND_EXP = 40
+ND_SIN = 41
+ND_COS = 42
+ND_TAN = 43
+ND_LN = 44
+ND_SQRT = 45
+ND_PI = 46
+ND_IDENT = 47
+
+# Dictionary for binary operator precedences
+binop_precedence = {
+    "+": 1,
+    "-": 1,
+    "*": 2,
+    "/": 2,
+    "^": 3
+}
 
 class Node:
     def __init__(self, kind):
@@ -61,7 +83,7 @@ class Opaque:
     def __init__(self, name):
         self.name = name
         self.params = []
-        self.args = []
+        self.args = None
     
     def add_params(self, param):
         if isinstance(param, list):
@@ -70,10 +92,7 @@ class Opaque:
             self.params.append(param)
 
     def add_args(self, arg):
-        if isinstance(arg, list):
-            self.params.extend(arg)
-        else:
-            self.params.append(arg)
+        self.args = arg
 
 class Gate:
     def __init__(self, name):
@@ -157,6 +176,12 @@ class Parser(Token):
             Token.annotate_error(self.input_str, self.token[self.token_idx][self.idx_idx], "missing operator: " + op, self.token[self.token_idx][self.line_idx], self.token[self.token_idx][self.err_line_idx])
         self.token_idx += 1
     
+    def consume_operator_str(self, op):
+        if self.token[self.token_idx][self.kind_idx] != token.TK_OPERATOR or self.token[self.token_idx][self.str_idx] != op:
+            return False
+        self.token_idx += 1
+        return True
+    
     def check_TK_kind(self, idx):
         return self.token[idx][self.kind_idx]
 
@@ -184,52 +209,52 @@ class Parser(Token):
     statement   := decl 
                    | gatedecl 
                    | opaque id idlist ;
-                   | opaque id () idlist ; | opaque id (idlist) idlist ;
+                   | opaque id "(" ")" idlist ";" | opaque id "("idlist")" idlist ";"
                    | qop
-                   | if (condition) qop
+                   | if "("condition")" qop
     condition   := id == nninteger
 
-    decl        := qreg id [nninteger] ; | creg id [nninteger] ;
-    gatedecl    := gate id idlist {goplist}
-                   | gate id () idlist {goplist}
-                   | gate id (idlist) idlist {goplist}
+    decl        := qreg id "["nninteger"]" ";" | creg id "["nninteger"]" ";"
+    gatedecl    := gate id idlist "{" goplist "}"
+                   | gate id "("")" idlist "{"goplist"}"
+                   | gate id "("idlist")" idlist "{"goplist"}"
     goplist     := uop 
                    | goplist uop 
     qop         := uop 
-                   | measure argument -> argument_c ;
-                   | reset argument ;
-    uop         := U (explist) argument ;
-                   | CX argument , argument ;
-                   | X argument ;
-                   | Y argument ;
-                   | Z argument ;
-                   | S argument ;
-                   | T argument ;
-                   | RTHETA (explist) argument ;
-                   | RX (explist) argument
-                   | RY (explist) argument
-                   | RZ (explist) argument
-                   | H argument ;
-                   | CY argument, argument ;
-                   | CZ argument, argument ;
-                   | CU (explist) argument, argument ;
-                   | CS argument, argument ;
-                   | CT argument, argument ;
-                   | CRTHETA (explist) argument, argument ;
-                   | CRX (explist) argument, argument ;
-                   | CRY (explist) argument, argument ;
-                   | CRZ (explist) argument, argument ;
-                   | CH argument, arugment ;
-                   | id idlist ; | id () idlist ;
-                   | id (explist) idlist ;
-    idlist     := id | id [nninteger], idlist
-    argument_c  := id | id [nninteger]
-    argument    := id | id [nninteger]
-    explist     := exp | explist , exp
-    exp         := real | nninteger | pi | id
-                   | exp + exp | exp - exp | exp * exp 
-                   | exp / exp | - exp | exp ^ exp
-                   | (exp) | unaryop (exp)
+                   | measure argument "->" argument_c ";"
+                   | reset argument ";"
+    uop         := U "("explist")" argument ";"
+                   | CX argument "," argument ";"
+                   | X argument ";"
+                   | Y argument ";"
+                   | Z argument ";"
+                   | S argument ";"
+                   | T argument ";"
+                   | RTHETA "("explist")" argument ";"
+                   | RX "("explist")" argument ";"
+                   | RY "("explist")" argument ";"
+                   | RZ "("explist")" argument ";"
+                   | H argument ";"
+                   | CY argument "," argument ";"
+                   | CZ argument "," argument ";"
+                   | CU "("explist")" argument "," argument ";"
+                   | CS argument "," argument ";"
+                   | CT argument "," argument ";"
+                   | CRTHETA "("explist")" argument "," argument ";"
+                   | CRX "("explist")" argument "," argument ";"
+                   | CRY "("explist")" argument "," argument ";"
+                   | CRZ "("explist")" argument "," argument ";"
+                   | CH argument "," arugment ";"
+                   | id idlist ";" | id "("")" idlist ";"
+                   | id "("explist")" idlist ";"
+    idlist      := id | id "["nninteger"]" "," idlist
+    argument_c  := id | id "["nninteger"]"
+    argument    := id | id "["nninteger"]"
+    explist     := exp | explist "," exp
+    exp         := ( "+" | "-" )? primary
+    primary     := real | nninteger | pi | id | unaryop"("exp")" | "("binaryop")"
+    binaryop    := exp "+" exp | exp "-" exp | exp "*" exp 
+                   | exp "/" exp | exp "^" exp
     unaryop     := sin | cos | tan | exp | ln | sqrt
     
     id          := [a-z][A-Za-z0-9_]*
@@ -810,8 +835,86 @@ class Parser(Token):
     def idlist(self):
         qreglist = []
         self.id_check(qreglist)
-        while not self.check_operator_str(self.token_idx, ";"):
+        while self.check_operator_str(self.token_idx, ","):
             self.expect(",")
             self.id_check(qreglist)
         node_idlist = Parser.create_node_qreg(qreglist)
         return node_idlist
+    
+    '''
+    explist     := exp | explist "," exp
+    exp         := ( "+" | "-" )? primary
+    primary     := real | nninteger | pi | id | unaryop"("exp")" | "("binaryop")"
+    binaryop    := exp "+" exp | exp "-" exp | exp "*" exp 
+                   | exp "/" exp | exp "^" exp
+    unaryop     := sin | cos | tan | exp | ln | sqrt'''
+    
+    # For binary operations, operator precedence parsing is applied
+    # Recursive descent parsing for exp = ( "+" | "-" )? primary
+    def exp(self):
+        if self.consume_operator_str("+"):
+            return self.primary()
+        if self.consume_operator_str("-"):
+            node_exp = Parser.create_node(ND_SUB, self.create_node_num(0), self.primary())
+            return node_exp
+        return self.primary()
+    
+    # Check for unary operators 
+    def consume_unaryop(self):
+        TK_kind = self.check_TK_kind(self.token_idx)
+        if TK_kind == token.TK_SIN:
+            self.token_idx += 1
+            return ND_SIN
+        elif TK_kind == token.TK_COS:
+            self.token_idx += 1
+            return ND_COS
+        elif TK_kind == token.TK_TAN:
+            self.token_idx += 1
+            return ND_TAN
+        elif TK_kind == token.TK_EXP:
+            self.token_idx += 1
+            return ND_EXP
+        elif TK_kind == token.TK_LN:
+            self.token_idx += 1
+            return ND_LN
+        elif TK_kind == token.TK_SQRT:
+            self.token_idx += 1
+            return ND_SQRT
+        else:
+            self.error_at(self.token_idx, "This unary operator is not supported")
+    
+    # Recursive descent parsing for primary = real | nninteger | pi | id | unaryop"("exp")" | "("binaryop")"
+    def primary(self):
+        # Recursive descent parsing for real and nninteger
+        if self.check_TK_kind(self.token_idx) == token.TK_NUM:
+            val = self.token[self.token_idx][self.val_idx]*(10**self.token[self.token_idx][self.exp_idx])
+            node_primary = Parser.create_node_num(val)
+            self.token_idx += 1
+            return node_primary
+        # Recursive descent parsing for pi
+        elif self.check_TK_kind(self.token_idx) == token.TK_PI:
+            node_primary = Parser.create_node(ND_PI)
+            self.token_idx += 1
+            return node_primary
+        # Recursive descent parsing for id
+        elif self.check_TK_kind(self.token_idx) == token.TK_IDENT:
+            # Note! Here should be a check for whether the parameter is declared for this gate, this check will be in the code generation part
+            node_primary = Parser.create_node(ND_IDENT)
+            node_primary.add_str(self.token[self.token_idx][self.str_idx])
+            self.token_idx += 1
+            return node_primary
+        # Recursive descent parsing for "("binaryop")"
+        elif self.check_operator_str(self.token_idx, "("):
+            self.consume_operator_str("(")
+            node_primary = self.binaryop()
+            return node_primary
+        # Recursive descent parsing for unaryop"("exp")"
+        else:
+            UnaryOp = self.consume_unaryop()
+            self.expect("(")
+            node_primary = Parser.create_node(UnaryOp, self.exp())
+            self.expect(")")
+            return node_primary
+    
+    # Operator precedence parsing for binaryop = exp "+" exp | exp "-" exp | exp "*" exp | exp "/" exp | exp "^" exp
+    # In this case, the precedences will be initialized as a dictionary
