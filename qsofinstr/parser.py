@@ -140,6 +140,7 @@ class Parser(Token):
         self.qregs = {}
         self.cregs = {}
         self.gates = {}
+        self.code = []
         
     @staticmethod
     def create_node(kind, leftnode=None, rightnode=None):
@@ -196,7 +197,8 @@ class Parser(Token):
         return self.token[idx][self.kind_idx] == token.TK_OPERATOR and self.token[idx][self.str_idx] == str
     
     def error_at(self, idx, message):
-        Token.annotate_error(self.input_str, self.token[idx][self.idx_idx], message, self.token[idx][self.line_idx], self.token[idx][self.err_line_idx])
+        print(self.token[idx][self.idx_idx])
+        Token.annotate_error(self.input_str, self.token[idx][self.idx_idx], message, self.token[idx][self.line_count_idx], self.token[idx][self.err_line_idx_idx])
     
     def check_num_error(self, name):
         # Check whether the qreg or creg size is missing or wrong type is used
@@ -273,7 +275,12 @@ class Parser(Token):
     # Define the AST and the recursive descent parsing
     #===========================================================================
     
-    # First starting with the statement
+    # Recursive descent parsing of program
+    def program(self):
+        while self.token[self.token_idx][self.kind_idx] != token.TK_EOF:
+            self.code.append(self.statement())
+
+    # Recursive descent parsing of statement
     def statement(self):
         if self.check_TK_kind(self.token_idx) == token.TK_QREG or self.check_TK_kind(self.token_idx) == token.TK_CREG:
             return self.decl()
@@ -282,8 +289,7 @@ class Parser(Token):
         elif self.check_TK_kind(self.token_idx) == token.TK_OPAQUE:
             # Check whether the opaque is already defined
             if self.token[self.token_idx+1][self.str_idx] in self.opaques:
-                Token.annotate_error(self.input_str, self.token[self.token_idx+1][self.idx_idx], "opaque "+self.token[self.token_idx+1][self.str_idx]\
-                                      +" already defined", self.token[self.token_idx+1][self.line_idx], self.token[self.token_idx+1][self.err_line_idx])
+                self.error_at(self.token_idx+1, "opaque "+self.token[self.token_idx+1][self.str_idx]+" already defined")
             if self.check_operator_str(self.token_idx+2, "("):
                 # Recursive descent parsing for 'opaque id (idlist) idlist ;'
                 if self.check_TK_kind(self.token_idx+3) == token.TK_IDENT:
@@ -1001,4 +1007,37 @@ class Parser(Token):
             exp_list.append(self.exp())
         node_explist = Parser.create_node_explist(exp_list)
         return node_explist
+    
+    # Define the Recursive descent parsing function
+    def Recursive_Descent_Parsing(self):
+        self.program()
+    
+    #================================================================================================
+    # End of Recursive descent parsing
+    #================================================================================================
+    
+    #================================================================================================
+    # Code generation
+    #================================================================================================
+    
+    # Define the function to generate the code for the node
+    def gen(self):
+        
+    
+    
+    
+    
+    
+    
+    
+filepath = "qsofinstr/check.qasm"
+str, TK = Token.Tokenize(filepath)
+parser = Parser(TK, str)
+parser.Recursive_Descent_Parsing()
+    
+    
+    
+    
+    
+    
     

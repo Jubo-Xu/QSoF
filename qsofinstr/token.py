@@ -34,6 +34,7 @@ TK_BARRIER = 30
 TK_OPAQUE = 31
 TK_QREG = 32
 TK_CREG = 33
+TK_EOF = 34
 
 class Token(object):
     def __init__(self):
@@ -384,11 +385,12 @@ class Token(object):
             # Check for ident
             if TK.is_alnum(TK.qasm_str[i]):
                 ident = TK.qasm_str[i]
+                err_i = i
                 i += 1
                 while TK.is_alnum(TK.qasm_str[i]) or TK.qasm_str[i].isdigit():
                     ident += TK.qasm_str[i]
                     i += 1
-                TK.Token.append((TK_IDENT, 0, 0, len(ident), ident, TK.line_count, TK.err_line_idx, i))
+                TK.Token.append((TK_IDENT, 0, 0, len(ident), ident, TK.line_count, TK.err_line_idx, err_i))
                 continue
             
             # Check for number
@@ -417,12 +419,12 @@ class Token(object):
                             i += 1
                     else:
                         raise Exception("Invalid number")
-                TK.Token.append((TK_NUM, float(num), float(exp), i-i_init, TK.qasm_str[i_init:i], TK.line_count, TK.err_line_idx, i))
+                TK.Token.append((TK_NUM, float(num), float(exp), i-i_init, TK.qasm_str[i_init:i], TK.line_count, TK.err_line_idx, i_init))
                 continue
             
             # raise Exception("Invalid character, cannot Tokenize!")
             TK.annotate_error(TK.qasm_str, i, "Invalid character, cannot Tokenize!", TK.line_count, TK.err_line_idx)
-        
+        TK.Token.append((TK_EOF, 0, 0, 0, "EOF", TK.line_count, TK.err_line_idx, i))
         return TK.qasm_str, TK.Token
     
     @staticmethod
@@ -448,8 +450,8 @@ class Token(object):
         sys.exit(annotated_string)
 
 
-filepath = "qsofinstr/check.qasm"
-str, TK = Token.Tokenize(filepath)
-# print(TK.qasm_str)
-# print(str)
-print(TK)
+# filepath = "qsofinstr/check.qasm"
+# str, TK = Token.Tokenize(filepath)
+# # print(TK.qasm_str)
+# # print(str)
+# print(TK)
