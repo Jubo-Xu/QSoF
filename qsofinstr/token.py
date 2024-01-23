@@ -91,6 +91,12 @@ class Token(object):
                 i += 1
                 continue
             
+            # Check for : this is for separate the control qubits and target qubit of multi-qubit controlled gates
+            if TK.qasm_str[i] == ":":
+                TK.Token.append((TK_OPERATOR, 0, 0, 1, ":", TK.line_count, TK.err_line_idx, i))
+                i += 1
+                continue
+            
             # Check for ,
             if TK.qasm_str[i] == ",":
                 TK.Token.append((TK_OPERATOR, 0, 0, 1, ",", TK.line_count, TK.err_line_idx, i))

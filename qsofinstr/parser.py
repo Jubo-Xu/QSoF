@@ -1,6 +1,9 @@
 from token import Token
 import token
+from quantumcircuit import Quantum_circuit
+from quantumcircuit import Time_slice_node
 
+# Define the node kinds
 ND_NUM = 0
 ND_QREG = 1
 ND_CREG = 2
@@ -65,7 +68,9 @@ class Node:
         self.kind = kind
         self.val = 0
         self.str = ""
+        # The qregs is a list of tuples, where each tuple is (name, index), if the index is -1, then it's not indexed
         self.qregs = []
+        # The cregs has the same form as qregs
         self.cregs = []
         self.left = None
         self.right = None
@@ -181,7 +186,7 @@ class Parser(Token):
     
     def expect(self, op):
         if self.token[self.token_idx][self.kind_idx] != token.TK_OPERATOR or self.token[self.token_idx][self.str_idx] != op:
-            Token.annotate_error(self.input_str, self.token[self.token_idx][self.idx_idx], "missing operator: " + op, self.token[self.token_idx][self.line_idx], self.token[self.token_idx][self.err_line_idx])
+            Token.annotate_error(self.input_str, self.token[self.token_idx][self.idx_idx], "missing operator: " + op, self.token[self.token_idx][self.line_count_idx], self.token[self.token_idx][self.err_line_idx_idx])
         self.token_idx += 1
     
     def consume_operator_str(self, op):
@@ -234,6 +239,7 @@ class Parser(Token):
                    | reset argument ";"
     uop         := U "("explist")" argument ";"
                    | CX argument "," argument ";"
+                   | CX idlist ":" argument ";"
                    | X argument ";"
                    | Y argument ";"
                    | Z argument ";"
@@ -245,15 +251,25 @@ class Parser(Token):
                    | RZ "("explist")" argument ";"
                    | H argument ";"
                    | CY argument "," argument ";"
+                   | CY idlist ":" argument ";"
                    | CZ argument "," argument ";"
+                   | CZ idlist ":" argument ";"
                    | CU "("explist")" argument "," argument ";"
+                   | CU "("explist")" idlist ":" argument ";"
                    | CS argument "," argument ";"
+                   | CS idlist ":" argument ";"
                    | CT argument "," argument ";"
+                   | CT idlist ":" argument ";"
                    | CRTHETA "("explist")" argument "," argument ";"
+                   | CRTHETA "("explist")" idlist ":" argument ";"
                    | CRX "("explist")" argument "," argument ";"
+                   | CRX "("explist")" idlist ":" argument ";"
                    | CRY "("explist")" argument "," argument ";"
+                   | CRY "("explist")" idlist ":" argument ";"
                    | CRZ "("explist")" argument "," argument ";"
+                   | CRZ "("explist")" idlist ":" argument ";"
                    | CH argument "," arugment ";"
+                   | CH idlist ":" argument ";"
                    | id idlist ";" | id "("")" idlist ";"
                    | id "("explist")" idlist ";"
     idlist      := id | id "["nninteger"]" "," idlist
@@ -396,6 +412,7 @@ class Parser(Token):
             self.check_num_error("qreg size")
             size = int(self.token[self.token_idx][self.val_idx])
             self.qregs[name] = size
+            self.token_idx += 1
             self.expect("]")
             self.expect(";")
             node_decl = Parser.create_node(ND_QREG_DEC)
@@ -428,6 +445,7 @@ class Parser(Token):
             self.check_num_error("creg size")
             size = int(self.token[self.token_idx][self.val_idx])
             self.qregs[name] = size
+            self.token_idx += 1
             self.expect("]")
             self.expect(";")
             node_decl = Parser.create_node(ND_CREG_DEC)
@@ -564,6 +582,9 @@ class Parser(Token):
             self.expect("]")
             return node_argument
         else:
+            # Check if the qreg is not indexed then it should be a qubit instead of a register
+            if self.qregs[name] != 1:
+                self.error_at(self.token_idx, "The qreg "+name+" should be indexed")
             node_argument = Parser.create_node_qreg((name, -1))
             return node_argument
     
@@ -595,6 +616,9 @@ class Parser(Token):
             self.expect("]")
             return node_argument
         else:
+            # Check if the creg is not indexed then it should be a bit instead of a register
+            if self.cregs[name] != 1:
+                self.error_at(self.token_idx, "The creg "+name+" should be indexed")
             node_argument = Parser.create_node_creg((name, -1))
             return node_argument
     
@@ -663,6 +687,9 @@ class Parser(Token):
             self.error_at(self.token_idx, "The second argument of "+name+" is missing")
         argument_rhs = self.argument()
         self.expect(";")
+        # Check whether the first argument is equal to the second argument
+        if argument_lhs.qregs[0][0] == argument_rhs.qregs[0][0] and argument_lhs.qregs[0][1] == argument_rhs.qregs[0][1]:
+            self.error_at(self.token_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
         node_uop = Parser.create_node(kind, argument_lhs, argument_rhs)
         return node_uop
     
@@ -685,6 +712,9 @@ class Parser(Token):
             self.error_at(self.token_idx, "The second argument of "+name+" is missing")
         argument_target = self.argument()
         self.expect(";")
+         # Check whether the first argument is equal to the second argument
+        if argument_control.qregs[0][0] == argument_target.qregs[0][0] and argument_control.qregs[0][1] == argument_target.qregs[0][1]:
+            self.error_at(self.token_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
         argument_control.add_left(argument_target)
         node_uop = Parser.create_node(kind, explist, argument_control)
         return node_uop
@@ -1021,7 +1051,28 @@ class Parser(Token):
     #================================================================================================
     
     # Define the function to generate the code for the node
-    def gen(self):
+    def code_gen(self, node, quantumcircuit):
+        # qubits added to circuit if ND_QREG_DEC is encountered
+        if node.kind == ND_QREG_DEC:
+            qubit_name = node.str
+            size = self.qregs[qubit_name]
+            quantumcircuit.add_qubit(qubit_name, size)
+            quantumcircuit.add_qubit_max_time_slice(qubit_name, 0, size)
+            return
+        # classical bits added to circuit if ND_CREG_DEC is encountered
+        if node.kind == ND_CREG_DEC:
+            cbit_name = node.str
+            size = self.cregs[cbit_name]
+            quantumcircuit.add_creg(cbit_name, size)
+            return
+        
+    # Define the function to generate the quantum circuit
+    def circuit_gen(self):
+        quantumcircuit = Quantum_circuit()
+        for i in range(len(self.code)):
+            self.code_gen(self.code[i], quantumcircuit)
+        return quantumcircuit
+    
         
     
     
@@ -1034,7 +1085,8 @@ filepath = "qsofinstr/check.qasm"
 str, TK = Token.Tokenize(filepath)
 parser = Parser(TK, str)
 parser.Recursive_Descent_Parsing()
-    
+QC = parser.circuit_gen()
+QC.test_draw()    
     
     
     
