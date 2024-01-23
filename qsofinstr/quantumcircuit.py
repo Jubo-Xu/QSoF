@@ -14,10 +14,14 @@ class Time_slice_node:
     def __init__(self, gate_operation):
         self.gate_operation = gate_operation
         self.controlled_operation = False
-        self.connected_qubits = []
+        self.connected_qubits = {}
         self.connected_cregs = []
         self.target_qubit = True
         self.time_slice_index = 0
+    
+    def add_connected_qubit(self, qubit_name, index=-1):
+        qubit = qubit_name + f"[{index}]" if index != -1 else qubit_name
+        self.connected_qubits[qubit] = f"timeslice_{self.time_slice_index}"
     
 
 
@@ -36,7 +40,7 @@ class Quantum_circuit:
             self.qubits[qubit_name] = {}
         else:
             for i in range(size):
-                self.qubits[qubit_name + f"[{i}]"] = {}
+                self.qubits[qubit_name + f"[{i}]"] = {} # the value of each qubit is a dictionary, where key is timeslice and value is the timeslice node
     
     def add_creg(self, creg_name, size):
         if size == 1:
@@ -59,7 +63,17 @@ class Quantum_circuit:
             else:
                 self.qubit_max_time_slice[qubit_name + f"[{size}]"] = time_slice_index
     
-    # Define the function to calculate the 
+    # Add a new no parameter single qubit gate to the circuit
+    def add_single_qubit_gate_no_parameter(self, gate_name, qubit_name, index=-1):
+        qubit = qubit_name + f"[{index}]" if index != -1 else qubit_name
+        time_slice = self.qubit_max_time_slice[qubit] + 1
+        self.qubit_max_time_slice[qubit] = time_slice
+        time_slice_node = Time_slice_node(gate_name)
+        time_slice_node.time_slice_index = time_slice
+        self.qubits[qubit][f"timeslice_{time_slice}"] = time_slice_node
+        self.max_time_slice = max(self.max_time_slice, time_slice)
+    
+    # Define the function to draw the draft quantum circuit for testing
     def test_draw(self):
         circuit_str = "   "
         qubit_pos = []
@@ -68,9 +82,24 @@ class Quantum_circuit:
             circuit_str += qubit + "  "
             qubit_pos.append(pos)
             pos += len(qubit+"  ")
-        circuit_str += "\n   "
-        circuit_str += "|"
-        for i in range(1, len(qubit_pos)):
-            circuit_str += " " *(qubit_pos[i]-qubit_pos[i-1]-1) + "|"
-        
+        for i in range(1, self.max_time_slice+1):
+            circuit_str += "\n   "
+            circuit_str += "|"
+            for j in range(1, len(qubit_pos)):
+                circuit_str += " " *(qubit_pos[j]-qubit_pos[j-1]-1) + "|"
+            circuit_str += "\n"
+            circuit_str += f"{i}: "
+            pos_idx = 0
+            for qubit in self.qubits:
+                if f"timeslice_{i}" in self.qubits[qubit]:
+                    if pos_idx == 0:
+                        circuit_str += self.qubits[qubit][f"timeslice_{i}"].gate_operation
+                    else:
+                        circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-1) + self.qubits[qubit][f"timeslice_{i}"].gate_operation
+                else:
+                    if pos_idx == 0:
+                        circuit_str += " "
+                    else:
+                        circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-1) + " "
+                pos_idx += 1
         print(circuit_str)

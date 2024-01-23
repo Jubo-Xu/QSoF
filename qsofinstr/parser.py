@@ -568,17 +568,13 @@ class Parser(Token):
         if self.check_operator_str(self.token_idx, "["):
             # Check whether the qreg size is missing or wrong type is used
             self.token_idx += 1
-            # if self.check_TK_kind(self.token_idx) != token.TK_NUM:
-            #     if self.check_operator_str(self.token_idx, "]"):
-            #         self.error_at(self.token_idx, "There has to be a number for the qreg index")
-            #     else:
-            #         self.error_at(self.token_idx, "The qreg index should be a number")
-            # # Check whether the qreg size is an integer
-            # if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
-            #     self.error_at(self.token_idx, "The qreg size should be an integer")
             self.check_num_error("qreg index")
             index = int(self.token[self.token_idx][self.val_idx])
+            # Check whether the qreg index exceeds the size
+            if index >= self.qregs[name]:
+                self.error_at(self.token_idx, "The qreg index exceeds the size")
             node_argument = Parser.create_node_qreg((name, index))
+            self.token_idx += 1
             self.expect("]")
             return node_argument
         else:
@@ -602,17 +598,13 @@ class Parser(Token):
         if self.check_operator_str(self.token_idx, "["):
             # Check whether the creg size is missing or wrong type is used
             self.token_idx += 1
-            # if self.check_TK_kind(self.token_idx) != token.TK_NUM:
-            #     if self.check_operator_str(self.token_idx, "]"):
-            #         self.error_at(self.token_idx, "There has to be a number for the creg index")
-            #     else:
-            #         self.error_at(self.token_idx, "The creg index should be a number")
-            # # Check whether the creg size is an integer
-            # if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
-            #     self.error_at(self.token_idx, "The creg size should be an integer")
             self.check_num_error("creg index")
             index = int(self.token[self.token_idx][self.val_idx])
+            # Check whether the creg index exceeds the size
+            if index >= self.cregs[name]:
+                self.error_at(self.token_idx, "The creg index exceeds the size")
             node_argument = Parser.create_node_creg((name, index))
+            self.token_idx += 1
             self.expect("]")
             return node_argument
         else:
@@ -874,6 +866,9 @@ class Parser(Token):
             self.token_idx += 1
             self.check_num_error("qreg index")
             idx = int(self.token[self.token_idx][self.val_idx])
+            # Check whether the qreg index exceeds the size
+            if idx >= self.qregs[name]:
+                self.error_at(self.token_idx, "The qreg index exceeds the size")
             self.expect("]")
             qreglist.append((name, idx))
         else:
@@ -1065,6 +1060,51 @@ class Parser(Token):
             size = self.cregs[cbit_name]
             quantumcircuit.add_creg(cbit_name, size)
             return
+        # the control and target qubits will be returned for both argument and idlist
+        if node.kind == ND_QREG:
+            if node.controlled:
+                control_qreg = node.qregs
+                target_qreg = self.code_gen(node.left, quantumcircuit)
+                return (control_qreg, target_qreg)
+            else:
+                return node.qregs
+        #### the following code is for the single qubit gates without parameters ####
+        # X gate
+        if node.kind == ND_X:
+            qubit = self.code_gen(node.left, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_no_parameter("x", qubit_name, qubit_idx)
+        # Y gate
+        if node.kind == ND_Y:
+            qubit = self.code_gen(node.left, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_no_parameter("y", qubit_name, qubit_idx)
+        # Z gate
+        if node.kind == ND_Z:
+            qubit = self.code_gen(node.left, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_no_parameter("z", qubit_name, qubit_idx)
+        # S gate
+        if node.kind == ND_S:
+            qubit = self.code_gen(node.left, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_no_parameter("s", qubit_name, qubit_idx)
+        # T gate
+        if node.kind == ND_T:
+            qubit = self.code_gen(node.left, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_no_parameter("t", qubit_name, qubit_idx)
+        # H gate
+        if node.kind == ND_H:
+            qubit = self.code_gen(node.left, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_no_parameter("h", qubit_name, qubit_idx)
         
     # Define the function to generate the quantum circuit
     def circuit_gen(self):

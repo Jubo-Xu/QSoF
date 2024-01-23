@@ -1,5 +1,12 @@
-qreg q[2];
-qreg q_0[3];
-qreg q3[1];
-qreg q4[1];
+qreg q[4];
+qreg q_0[1];
+
+X q[0];
+X q[1];
+X q[3];
+Y q_0;
+X q[1];
+Y q[1];
+X q[3];
+H q[2];
 
