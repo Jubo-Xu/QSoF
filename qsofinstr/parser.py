@@ -3,6 +3,7 @@ import token
 from quantumcircuit import Quantum_circuit
 from quantumcircuit import Time_slice_node
 import quantumcircuit
+import math
 
 # Define the node kinds
 ND_NUM = 0
@@ -75,7 +76,7 @@ class Node:
         self.cregs = []
         self.left = None
         self.right = None
-        self.controlled = False
+        self.controlled_with_parameter = False # This is a flag to indicate whether the gate is controlled with parameter, mainly for circuit generation
     
     def add_str(self, str):
         self.str = str
@@ -689,16 +690,16 @@ class Parser(Token):
         if self.check_operator_str(self.token_idx, ","):
             self.error_at(self.token_idx, "The first argument of "+name+" is missing")
         argument_lhs = self.argument()
-        argument_lhs.controlled = True
         self.expect(",")
         # Check whether the second argument is missing
         if self.check_operator_str(self.token_idx, ";"):
             self.error_at(self.token_idx, "The second argument of "+name+" is missing")
+        target_idx = self.token_idx
         argument_rhs = self.argument()
-        self.expect(";")
         # Check whether the first argument is equal to the second argument
         if argument_lhs.qregs[0][0] == argument_rhs.qregs[0][0] and argument_lhs.qregs[0][1] == argument_rhs.qregs[0][1]:
-            self.error_at(self.token_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
+            self.error_at(target_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
+        self.expect(";")
         node_uop = Parser.create_node(kind, argument_lhs, argument_rhs)
         return node_uop
     
@@ -716,16 +717,17 @@ class Parser(Token):
         if self.check_operator_str(self.token_idx, ","):
             self.error_at(self.token_idx, "The first argument of "+name+" is missing")
         argument_control = self.argument()
-        argument_control.controlled = True
+        argument_control.controlled_with_parameter = True
         self.expect(",")
         # Check whether the second argument is missing
         if self.check_operator_str(self.token_idx, ";"):
             self.error_at(self.token_idx, "The second argument of "+name+" is missing")
+        target_idx = self.token_idx
         argument_target = self.argument()
-        self.expect(";")
-         # Check whether the first argument is equal to the second argument
+        # Check whether the first argument is equal to the second argument
         if argument_control.qregs[0][0] == argument_target.qregs[0][0] and argument_control.qregs[0][1] == argument_target.qregs[0][1]:
-            self.error_at(self.token_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
+            self.error_at(target_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
+        self.expect(";")
         argument_control.add_left(argument_target)
         node_uop = Parser.create_node(kind, explist, argument_control)
         return node_uop
@@ -1128,6 +1130,9 @@ class Parser(Token):
         # return the val of the node if it is a number
         if node.kind == ND_NUM:
             return node.val
+        # return the pi if it is a pi node
+        if node.kind == ND_PI:
+            return math.pi
         # qubits added to circuit if ND_QREG_DEC is encountered
         if node.kind == ND_QREG_DEC:
             qubit_name = node.str
@@ -1143,10 +1148,10 @@ class Parser(Token):
             return
         # the control and target qubits will be returned for both argument and idlist
         if node.kind == ND_QREG:
-            if node.controlled:
+            if node.controlled_with_parameter:
                 control_qreg = node.qregs
                 target_qreg = self.code_gen(node.left, quantumcircuit)
-                return (control_qreg, target_qreg)
+                return control_qreg, target_qreg
             else:
                 return node.qregs
         #### the following code is for the single qubit gates without parameters ####
@@ -1230,6 +1235,50 @@ class Parser(Token):
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx)
+        
+        # The following code is for the controlled gates without parameters
+        # CX gate
+        if node.kind == ND_CX:
+            control_qubit = self.code_gen(node.left, quantumcircuit)
+            target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_no_parameter("cx", control_qubit, target_name, target_idx)
+        # CY gate
+        if node.kind == ND_CY:
+            control_qubit = self.code_gen(node.left, quantumcircuit)
+            target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_no_parameter("cy", control_qubit, target_name, target_idx)
+        # CZ gate
+        if node.kind == ND_CZ:
+            control_qubit = self.code_gen(node.left, quantumcircuit)
+            target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_no_parameter("cz", control_qubit, target_name, target_idx)
+        # CS gate
+        if node.kind == ND_CS:
+            control_qubit = self.code_gen(node.left, quantumcircuit)
+            target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_no_parameter("cs", control_qubit, target_name, target_idx)
+        # CT gate
+        if node.kind == ND_CT:
+            control_qubit = self.code_gen(node.left, quantumcircuit)
+            target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_no_parameter("ct", control_qubit, target_name, target_idx)
+        # CH gate
+        if node.kind == ND_H:
+            control_qubit = self.code_gen(node.left, quantumcircuit)
+            target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_no_parameter("ch", control_qubit, target_name, target_idx)
         
         
     # Define the function to generate the quantum circuit
