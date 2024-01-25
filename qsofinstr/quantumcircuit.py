@@ -9,6 +9,19 @@ this condition. It can be changed later if the hardware design is improved.
 
 The quantum circuit after the segmentation would be described by a 3D graph
 '''
+# The number requirement table for parameters of basic gates that need parameters
+Param_Num_Table = {
+    "RTHETA": 1,
+    "RX": 1,
+    "RY": 1,
+    "RZ": 1,
+    "U": 3,
+    "CRTHETA": 1,
+    "CRX": 1,
+    "CRY": 1,
+    "CRZ": 1,
+    "CU": 3
+}
 
 class Time_slice_node:
     def __init__(self, gate_operation):
@@ -16,12 +29,19 @@ class Time_slice_node:
         self.controlled_operation = False
         self.connected_qubits = {}
         self.connected_cregs = []
+        self.parameters = []
         self.target_qubit = True
         self.time_slice_index = 0
     
     def add_connected_qubit(self, qubit_name, index=-1):
         qubit = qubit_name + f"[{index}]" if index != -1 else qubit_name
         self.connected_qubits[qubit] = f"timeslice_{self.time_slice_index}"
+    
+    def add_parameter(self, parameter):
+        if isinstance(parameter, list):
+            self.parameters.extend(parameter)
+        else:
+            self.parameters.append(parameter)
     
 
 
@@ -73,15 +93,28 @@ class Quantum_circuit:
         self.qubits[qubit][f"timeslice_{time_slice}"] = time_slice_node
         self.max_time_slice = max(self.max_time_slice, time_slice)
     
+    # Add a new single qubit gate with parameter to the circuit
+    def add_single_qubit_gate_with_parameter(self, gate_name, qubit_name, parameter, index = -1):
+        qubit = qubit_name + f"[{index}]" if index != -1 else qubit_name
+        time_slice = self.qubit_max_time_slice[qubit] + 1
+        self.qubit_max_time_slice[qubit] = time_slice
+        name = f"{gate_name}({', '.join(map(str, parameter))})"
+        time_slice_node = Time_slice_node(name)
+        time_slice_node.time_slice_index = time_slice
+        time_slice_node.add_parameter(parameter)
+        self.qubits[qubit][f"timeslice_{time_slice}"] = time_slice_node
+        self.max_time_slice = max(self.max_time_slice, time_slice)
+        
+    
     # Define the function to draw the draft quantum circuit for testing
     def test_draw(self):
         circuit_str = "   "
         qubit_pos = []
         pos = len(circuit_str)
         for qubit in self.qubits:
-            circuit_str += qubit + "  "
+            circuit_str += qubit + "               "
             qubit_pos.append(pos)
-            pos += len(qubit+"  ")
+            pos += len(qubit+"               ")
         for i in range(1, self.max_time_slice+1):
             circuit_str += "\n   "
             circuit_str += "|"
@@ -90,16 +123,21 @@ class Quantum_circuit:
             circuit_str += "\n"
             circuit_str += f"{i}: "
             pos_idx = 0
+            operation_len = 1
             for qubit in self.qubits:
                 if f"timeslice_{i}" in self.qubits[qubit]:
                     if pos_idx == 0:
                         circuit_str += self.qubits[qubit][f"timeslice_{i}"].gate_operation
+                        operation_len = len(self.qubits[qubit][f"timeslice_{i}"].gate_operation)
                     else:
-                        circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-1) + self.qubits[qubit][f"timeslice_{i}"].gate_operation
+                        circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + self.qubits[qubit][f"timeslice_{i}"].gate_operation
+                        operation_len = len(self.qubits[qubit][f"timeslice_{i}"].gate_operation)
                 else:
                     if pos_idx == 0:
                         circuit_str += " "
+                        operation_len = 1
                     else:
-                        circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-1) + " "
+                        circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + " "
+                        operation_len = 1
                 pos_idx += 1
         print(circuit_str)

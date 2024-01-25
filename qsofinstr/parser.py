@@ -2,6 +2,7 @@ from token import Token
 import token
 from quantumcircuit import Quantum_circuit
 from quantumcircuit import Time_slice_node
+import quantumcircuit
 
 # Define the node kinds
 ND_NUM = 0
@@ -89,35 +90,46 @@ class Opaque:
     def __init__(self, name):
         self.name = name
         self.params = []
-        self.args = None
-    
-    def add_params(self, param):
-        if isinstance(param, list):
-            self.params.extend(param)
-        else:
-            self.params.append(param)
-
-    def add_args(self, arg):
-        self.args = arg
-
-class Gate:
-    def __init__(self, name):
-        self.name = name
-        self.params = []
         self.args = []
-        self.contents = []
     
     def add_params(self, param):
         if isinstance(param, list):
             self.params.extend(param)
         else:
             self.params.append(param)
-    
+
     def add_args(self, arg):
         if isinstance(arg, list):
             self.args.extend(arg)
         else:
-            self.params.append(arg)
+            self.args.append(arg)
+
+class Gate:
+    def __init__(self, name):
+        self.name = name
+        self.params = None
+        self.args = None
+        self.contents = []
+    
+    def add_params(self, param):
+        # The parameters of Gate declaration is a dictionary, which is used for two things: 
+        # 1. check whether the parameter is defined for the gate operations inside the contents
+        # 2. easy to replace the parameter with the actual value during the code generation
+        if isinstance(param, list):
+            self.params = {}
+            for i in range(len(param)):
+                self.params[param[i]] = 0
+        else:
+            self.params = {param: 0}
+    
+    def add_args(self, arg):
+        # The arguments of Gate declaration is a dictionary, which is served for the same purpose as the parameters
+        if isinstance(arg, list):
+            self.args = {}
+            for i in range(len(arg)):
+                self.args[arg[i]] = ""
+        else:
+            self.args = {arg: ""}
     
     def add_contents(self, content_node):
         self.contents.append(content_node)
@@ -129,7 +141,10 @@ class Explist(Node):
         self.exps = []
     
     def add_exps(self, exp):
-        self.exps.append(exp)
+        if isinstance(exp, list):
+            self.exps.extend(exp)
+        else:
+            self.exps.append(exp)
 
 
 class Parser(Token):
@@ -146,6 +161,20 @@ class Parser(Token):
         self.cregs = {}
         self.gates = {}
         self.code = []
+        # This is a flag to indicate whether the current state is a gate definition, which is 
+        # mainly used for some error checks
+        self.GATE_define = False 
+        # This is a flag to indicate whether the current state is a gate declaration, which is 
+        # mainly used for the error checks for whether the number of parameters sent is correct
+        self.GATE_declare = False
+        # This is a flag to indicate whether the current state is an opaque declaration, which serves
+        # as the same purpose as the GATE_declare flag
+        self.OPAQUE_declare = False
+        # This variable is used in together with the Gate declare and Opaque declare flags
+        self.GATE_name = ""
+        # This variable is used for the gate definition
+        self.GATE_DEF_name = ""
+        
         
     @staticmethod
     def create_node(kind, leftnode=None, rightnode=None):
@@ -312,10 +341,10 @@ class Parser(Token):
                     name = self.token[self.token_idx+1][self.str_idx]
                     self.token_idx += 3
                     opaque_instance = Opaque(name)
-                    params = self.idlist()
+                    params = self.idlist_param()
                     opaque_instance.add_params(params)
                     self.expect(")")
-                    args = self.idlist()
+                    args = self.idlist_qubit().qregs
                     opaque_instance.add_args(args)
                     self.expect(";")
                     self.opaques[name] = opaque_instance
@@ -327,7 +356,7 @@ class Parser(Token):
                     name = self.token[self.token_idx+1][self.str_idx]
                     self.token_idx += 4
                     opaque_instance = Opaque(name)
-                    args = self.idlist()
+                    args = self.idlist_qubit().qregs
                     opaque_instance.add_args(args)
                     self.expect(";")
                     self.opaques[name] = opaque_instance
@@ -341,7 +370,7 @@ class Parser(Token):
                 name = self.token[self.token_idx+1][self.str_idx]
                 self.token_idx += 3
                 opaque_instance = Opaque(name)
-                args = self.idlist()
+                args = self.idlist_qubit().qregs
                 opaque_instance.add_args(args)
                 self.expect(";")
                 self.opaques[name] = opaque_instance
@@ -400,15 +429,6 @@ class Parser(Token):
             name = self.token[self.token_idx][self.str_idx]
             self.token_idx += 1
             self.expect("[")
-            # # Check whether the qreg size is missing or wrong type is used
-            # if self.check_TK_kind(self.token_idx) != token.TK_NUM:
-            #     if self.check_operator_str(self.token_idx, "]"):
-            #         self.error_at(self.token_idx, "The qreg size is missing")
-            #     else:
-            #         self.error_at(self.token_idx, "The qreg size should be a number")
-            # # Check whether the qreg size is an integer
-            # if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
-            #     self.error_at(self.token_idx, "The qreg size should be an integer")
             self.check_num_error("qreg size")
             size = int(self.token[self.token_idx][self.val_idx])
             self.qregs[name] = size
@@ -433,15 +453,6 @@ class Parser(Token):
             name = self.token[self.token_idx][self.str_idx]
             self.token_idx += 1
             self.expect("[")
-            # # Check whether the creg size is missing or wrong type is used
-            # if self.check_TK_kind(self.token_idx) != token.TK_NUM:
-            #     if self.check_operator_str(self.token_idx, "]"):
-            #         self.error_at(self.token_idx, "The creg size is missing")
-            #     else:
-            #         self.error_at(self.token_idx, "The creg size should be a number")
-            # # Check whether the creg size is an integer
-            # if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
-            #     self.error_at(self.token_idx, "The creg size should be an integer")
             self.check_num_error("creg size")
             size = int(self.token[self.token_idx][self.val_idx])
             self.qregs[name] = size
@@ -480,20 +491,22 @@ class Parser(Token):
         if self.token[self.token_idx][self.str_idx] in self.gates:
             self.error_at(self.token_idx, "gate "+self.token[self.token_idx][self.str_idx]+" already defined")
         name = self.token[self.token_idx][self.str_idx]
+        # Set the gate_define flag to true to indicate that the current state is a gate definition
+        self.GATE_define = True
+        # Set the current gate name
+        self.GATE_DEF_name = name
         self.token_idx += 1
         if self.check_operator_str(self.token_idx, "("):
             self.token_idx += 1
             params = []
-            # Check for empty parameters
-            if self.check_operator_str(self.token_idx, ")"):
-                self.token_idx += 1
-            # Check for nonempty parameters
-            if self.check_TK_kind(self.token_idx) == token.TK_IDENT:
-                params.extend(self.idlist())
             # Check for some errors 
             if self.check_TK_kind(self.token_idx) != token.TK_IDENT and not self.check_operator_str(self.token_idx, ")"):
                 self.error_at(self.token_idx, "The parameters should be identifiers")
+            # Check for nonempty parameters
+            if self.check_TK_kind(self.token_idx) == token.TK_IDENT:
+                params.extend(self.idlist_param())
             self.expect(")")
+            
         # Check whether the arguments are missing or wrong type is used
         if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
             if self.check_operator_str(self.token_idx, "{"):
@@ -502,12 +515,14 @@ class Parser(Token):
                 self.error_at(self.token_idx, "The arguments and the contents are missing")
             else:
                 self.error_at(self.token_idx, "The arguments cannot be this type")
-        args = self.idlist()
+        args = self.idlist_qubit().qregs
         self.expect("{")
         gate_val = Gate(name)
         while not self.check_operator_str(self.token_idx, "}"):
             gate_val.add_contents(self.uop())
         self.expect("}")
+        # flip the gate_define flag to change the current state back to normal
+        self.GATE_define = False
         gate_val.add_params(params)
         gate_val.add_args(args)
         self.gates[name] = gate_val
@@ -642,6 +657,8 @@ class Parser(Token):
     
     def uop_with_explist_single(self, kind, name):
         self.token_idx += 1
+        # Set the current gate name
+        self.GATE_name = name
         self.expect("(")
         # Check whether the explist is missing
         if self.check_operator_str(self.token_idx, ")"):
@@ -687,6 +704,8 @@ class Parser(Token):
     
     def uop_with_explist_controlled(self, kind, name):
         self.token_idx += 1
+        # Set the current gate name
+        self.GATE_name = name
         self.expect("(")
         # Check whether the explist is missing
         if self.check_operator_str(self.token_idx, ")"):
@@ -734,7 +753,7 @@ class Parser(Token):
             return node_uop
         # Recursive descent parsing for 'S argument ;'
         elif self.check_TK_kind(self.token_idx) == token.TK_S:
-            node_uop = self.uop_without_explist_single(ND_S, "S")   
+            node_uop = self.uop_without_explist_single(ND_S, "S") 
             return node_uop
         # Recursive descent parsing for 'T argument ;'
         elif self.check_TK_kind(self.token_idx) == token.TK_T:
@@ -802,9 +821,15 @@ class Parser(Token):
             return node_uop
         # Recursive descent parsing for 'id idlist ; | id () idlist ; | id (explist) idlist ;'
         elif self.check_TK_kind(self.token_idx) == token.TK_IDENT:
-            # Check whether the gate is already defined 
-            if not self.token[self.token_idx][self.str_idx] in self.gates:
-                self.error_at(self.token_idx, "gate "+self.token[self.token_idx][self.str_idx]+" not defined")
+            name = self.token[self.token_idx][self.str_idx]
+            # Check whether the gate is a gate declare or an opaque declare
+            if name in self.gates:
+                self.GATE_declare = True
+            elif name in self.opaques:
+                self.OPAQUE_declare = True
+            else:
+                self.error_at(self.token_idx, f"gate {name} not defined")
+            self.GATE_name = name
             self.token_idx += 1
             if self.check_operator_str(self.token_ix, "("):
                 self.token_idx += 1
@@ -816,9 +841,14 @@ class Parser(Token):
                             self.error_at(self.token_idx, "The arguments of the gate are missing")
                         else:
                             self.error_at(self.token_idx, "The arguments cannot be this type")
-                    args = self.idlist()
+                    args = self.idlist_qubit()
                     self.expect(";")
                     node_uop = Parser.create_node(ND_GATE_NOEXP, args)
+                    # Add the gate name to the node for later circuit generation
+                    node_uop.add_str(name)
+                    # Flip the GATE_declare flag to change the current state back to normal
+                    self.GATE_declare = False
+                    self.OPAQUE_declare = False
                     return node_uop
                 else:
                     explist = self.explist()
@@ -829,14 +859,23 @@ class Parser(Token):
                             self.error_at(self.token_idx, "The arguments of the gate are missing")
                         else:
                             self.error_at(self.token_idx, "The arguments cannot be this type")
-                    args = self.idlist()
+                    args = self.idlist_qubit()
                     self.expect(";")
                     node_uop = Parser.create_node(ND_GATE_EXP, explist, args)
+                    # Add the gate name to the node for later circuit generation
+                    node_uop.add_str(name)
+                    # Flip the GATE_declare flag to change the current state back to normal
+                    self.GATE_declare = False
+                    self.OPAQUE_declare = False
                     return node_uop
             elif self.check_TK_kind(self.token_idx) == token.TK_IDENT:
-                args = self.idlist()
+                args = self.idlist_qubit()
                 self.expect(";")
                 node_uop = Parser.create_node(ND_GATE_NOEXP, args)
+                node_uop.add_str(name)
+                # Flip the GATE_declare flag to change the current state back to normal
+                self.GATE_declare = False
+                self.OPAQUE_declare = False
                 return node_uop
             # Check for some errors
             else:
@@ -852,7 +891,7 @@ class Parser(Token):
                 self.error_at(self.token_idx, "The gate operation cannot be this type")
     
     # Recursive descent parsing for 'idlist := id | id [nninteger], idlist'
-    def id_check(self, qreglist):
+    def id_check_qubit(self, qreglist):
         # Check whether the argument is identifier
         if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
             self.error_at(self.token_idx, "The type should be identifier")
@@ -874,14 +913,28 @@ class Parser(Token):
         else:
             qreglist.append((name, -1))
         
-    def idlist(self):
+    def idlist_qubit(self):
         qreglist = []
-        self.id_check(qreglist)
+        self.id_check_qubit(qreglist)
         while self.check_operator_str(self.token_idx, ","):
             self.expect(",")
-            self.id_check(qreglist)
+            self.id_check_qubit(qreglist)
         node_idlist = Parser.create_node_qreg(qreglist)
         return node_idlist
+
+    def id_check(self, paramlist):
+        # Check whether the argument is identifier
+        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
+            self.error_at(self.token_idx, "The type should be identifier")
+        paramlist.append(self.token[self.token_idx][self.str_idx])
+    
+    def idlist_param(self):
+        paramlist = []
+        self.id_check(paramlist)
+        while self.check_operator_str(self.token_idx, ","):
+            self.expect(",")
+            self.id_check(paramlist)
+        return paramlist
     
     '''
     explist     := exp | explist "," exp
@@ -943,6 +996,10 @@ class Parser(Token):
             # Note! Here should be a check for whether the parameter is declared for this gate, this check will be in the code generation part
             node_primary = Parser.create_node(ND_IDENT)
             node_primary.add_str(self.token[self.token_idx][self.str_idx])
+            # Check if the identifier of the parameter is already defined for gate definition
+            if self.GATE_define:
+                if self.token[self.token_idx][self.str_idx] not in self.gates[self.GATE_DEF_name].params:
+                    self.error_at(self.token_idx, f"The parameter {self.token[self.token_idx][self.str_idx]} is not defined for gate {self.GATE_DEF_name}")
             self.token_idx += 1
             return node_primary
         # Recursive descent parsing for "("binaryop")"
@@ -1029,7 +1086,28 @@ class Parser(Token):
         exp_list.append(self.exp())
         while self.check_operator_str(self.token_idx, ","):
             self.expect(",")
+            # Check whether the number of parameters exceeds the number of parameters required for the gate
+            if self.GATE_declare:
+                if len(exp_list) == len(self.gates[self.GATE_name].params):
+                    self.error_at(self.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
+            elif self.OPAQUE_declare:
+                if len(exp_list) == len(self.opaques[self.GATE_name].params):
+                    self.error_at(self.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
+            else:
+                if len(exp_list) == quantumcircuit.Param_Num_Table[self.GATE_name]:
+                    self.error_at(self.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
+                
             exp_list.append(self.exp())
+        # Check whether the number of parameters is less than the number of parameters required for the gate
+        if self.GATE_declare:
+            if len(exp_list) < len(self.gates[self.GATE_name].params):
+                self.error_at(self.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
+        elif self.OPAQUE_declare:
+             if len(exp_list) < len(self.opaques[self.GATE_name].params):
+                self.error_at(self.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
+        else:
+            if len(exp_list) < quantumcircuit.Param_Num_Table[self.GATE_name]:
+                self.error_at(self.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
         node_explist = Parser.create_node_explist(exp_list)
         return node_explist
     
@@ -1042,11 +1120,14 @@ class Parser(Token):
     #================================================================================================
     
     #================================================================================================
-    # Code generation
+    # Circuit generation
     #================================================================================================
     
-    # Define the function to generate the code for the node
+    # Define the recursive function to generate the code for the node
     def code_gen(self, node, quantumcircuit):
+        # return the val of the node if it is a number
+        if node.kind == ND_NUM:
+            return node.val
         # qubits added to circuit if ND_QREG_DEC is encountered
         if node.kind == ND_QREG_DEC:
             qubit_name = node.str
@@ -1105,6 +1186,51 @@ class Parser(Token):
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_no_parameter("h", qubit_name, qubit_idx)
+        
+        ### The following code is for the single qubit gates with parameters ###
+        # Generate the parameters based on explist of Explist node
+        if node.kind == ND_EXP_LIST:
+            params = []
+            for i in range(len(node.exps)):
+                params.append(self.code_gen(node.exps[i], quantumcircuit))
+            return params
+            
+        # RX gate
+        if node.kind == ND_RX:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            qubit = self.code_gen(node.right, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_with_parameter("rx", qubit_name, parameter, qubit_idx)
+        # RY gate
+        if node.kind == ND_RY:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            qubit = self.code_gen(node.right, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_with_parameter("ry", qubit_name, parameter, qubit_idx)
+        # RZ gate
+        if node.kind == ND_RZ:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            qubit = self.code_gen(node.right, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_with_parameter("rz", qubit_name, parameter, qubit_idx)
+        # RTHETA gate
+        if node.kind == ND_RTHETA:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            qubit = self.code_gen(node.right, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_with_parameter("rtheta", qubit_name, parameter, qubit_idx)
+        # U gate
+        if node.kind == ND_U:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            qubit = self.code_gen(node.right, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx)
+        
         
     # Define the function to generate the quantum circuit
     def circuit_gen(self):
