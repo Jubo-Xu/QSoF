@@ -232,7 +232,6 @@ class Parser(Token):
         return self.token[idx][self.kind_idx] == token.TK_OPERATOR and self.token[idx][self.str_idx] == str
     
     def error_at(self, idx, message):
-        print(self.token[idx][self.idx_idx])
         Token.annotate_error(self.input_str, self.token[idx][self.idx_idx], message, self.token[idx][self.line_count_idx], self.token[idx][self.err_line_idx_idx])
     
     def check_num_error(self, name):
@@ -1273,12 +1272,49 @@ class Parser(Token):
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_no_parameter("ct", control_qubit, target_name, target_idx)
         # CH gate
-        if node.kind == ND_H:
+        if node.kind == ND_CH:
             control_qubit = self.code_gen(node.left, quantumcircuit)
             target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_no_parameter("ch", control_qubit, target_name, target_idx)
+        
+        ## The following code is for the controlled gates with parameters
+        # CRX gate
+        if node.kind == ND_CRX:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_with_parameter("crx", control_qubit, target_name, parameter, target_idx)
+        # CRY gate
+        if node.kind == ND_CRY:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_with_parameter("cry", control_qubit, target_name, parameter, target_idx)
+        # CRZ gate
+        if node.kind == ND_CRZ:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_with_parameter("crz", control_qubit, target_name, parameter, target_idx)
+        # CRTHETA gate
+        if node.kind == ND_CRTHETA:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_with_parameter("crtheta", control_qubit, target_name, parameter, target_idx)
+        # CU gate
+        if node.kind == ND_CU:
+            parameter = self.code_gen(node.left, quantumcircuit)
+            control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_with_parameter("cu", control_qubit, target_name, parameter, target_idx)
         
         
     # Define the function to generate the quantum circuit

@@ -444,7 +444,7 @@ class Token(object):
             raise ValueError("Error index out of bounds")
         # Find the end index of the line containing the error
         line_end = 0
-        while input_string[error_index+line_end] != "\n":
+        while ((error_index+line_end) < len(input_string)) and (input_string[error_index+line_end] != "\n"):
             line_end += 1
         # Prepare the error annotation
         string_init = "[line: "+str(line_idx)+"] "
