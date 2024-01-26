@@ -189,7 +189,7 @@ class Quantum_circuit:
     
     # Define the function to draw the draft quantum circuit for testing
     def test_draw(self):
-        circuit_str = "   "
+        circuit_str = " "*(len(str(int(self.max_time_slice)))+2)
         qubit_pos = []
         pos = len(circuit_str)
         for qubit in self.qubits:
@@ -197,12 +197,12 @@ class Quantum_circuit:
             qubit_pos.append(pos)
             pos += len(qubit+"               ")
         for i in range(1, self.max_time_slice+1):
-            circuit_str += "\n   "
+            circuit_str += "\n"+" "*(len(str(int(self.max_time_slice)))+2)
             circuit_str += "|"
             for j in range(1, len(qubit_pos)):
                 circuit_str += " " *(qubit_pos[j]-qubit_pos[j-1]-1) + "|"
             circuit_str += "\n"
-            circuit_str += f"{i}: "
+            circuit_str += f"{i}:"+" "*(qubit_pos[0]-len(str(i))-1)
             pos_idx = 0
             operation_len = 1
             for qubit in self.qubits:

@@ -957,6 +957,7 @@ class Parser(Token):
         if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
             self.error_at(self.token_idx, "The type should be identifier")
         paramlist.append(self.token[self.token_idx][self.str_idx])
+        self.token_idx += 1
     
     def idlist_param(self):
         paramlist = []
@@ -1158,6 +1159,11 @@ class Parser(Token):
         # return the val of the node if it is a number
         if node.kind == ND_NUM:
             return node.val
+        # return the corresponding parameter value if it is an identifier
+        if node.kind == ND_IDENT:
+            parameter_name = node.str
+            parameter_val = self.gates[self.GATE_DEF_name].params[parameter_name]
+            return parameter_val
         # return the pi if it is a pi node
         if node.kind == ND_PI:
             return math.pi
@@ -1361,6 +1367,28 @@ class Parser(Token):
             gate_name = node.str
             arguments = self.code_gen(node.left, quantumcircuit)
             # Update the values of the arguments of this gate to the corresponding keys
+            i = 0
+            for arg in self.gates[gate_name].args:
+                self.gates[gate_name].args[arg] = arguments[i]
+                i += 1
+            # Generate the circuit for the contents of the gate declared
+            self.GATE_define = True
+            self.GATE_DEF_name = gate_name
+            for i in range(len(self.gates[gate_name].contents)):
+                self.code_gen(self.gates[gate_name].contents[i], quantumcircuit)
+            self.GATE_define = False
+            return
+        
+        # Gate definition with parameters
+        if node.kind == ND_GATE_EXP:
+            gate_name = node.str
+            explist = self.code_gen(node.left, quantumcircuit)
+            arguments = self.code_gen(node.right, quantumcircuit)
+            # Update the values of the arguments of this gate to the corresponding keys
+            i = 0
+            for param in self.gates[gate_name].params:
+                self.gates[gate_name].params[param] = explist[i]
+                i += 1
             i = 0
             for arg in self.gates[gate_name].args:
                 self.gates[gate_name].args[arg] = arguments[i]

@@ -3,6 +3,7 @@ import sys
 TK_OPERATOR = 0
 TK_NUM = 1
 TK_IDENT = 2
+TK_PI = 3
 TK_U = 4
 TK_X = 5
 TK_Y = 6
@@ -142,8 +143,8 @@ class Token(object):
             
             # Check for pi
             if TK.qasm_str[i] == "p" and TK.qasm_str[i+1] == "i":
-                if TK.qasm_str[i+2] == "," or TK.qasm_str[i+2] == ")":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "pi", TK.line_count, TK.err_line_idx, i))
+                if TK.qasm_str[i+2] == "," or TK.qasm_str[i+2] == ")" or TK.qasm_str[i+2].isspace():
+                    TK.Token.append((TK_PI, 0, 0, 2, "pi", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
