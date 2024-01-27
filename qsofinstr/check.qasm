@@ -1,6 +1,8 @@
+// qreg declare
 qreg q[4];
 qreg q_0[1];
 
+// gate define
 gate check_no_param a, b {
     X a;
     Y b;
@@ -8,12 +10,14 @@ gate check_no_param a, b {
     RTHETA (1) a;
 }
 
-gate check_with_param (param1, param2, param3) a, b{
+gate check_with_param (param1, param2, param3, param4) a, b{
     RX(param1) a;
     RZ(param2) b;
     CRX(param3) a, b;
+    RY(sqrt(param4)) b;
 }
 
+// gate declare
 X q[0];
 X q[1];
 X q[3];
@@ -33,4 +37,10 @@ CX q[1], q[3];
 CX q_0, q[2];
 CRX(1) q_0, q[3];
 check_no_param q[3], q[2];
-check_with_param(2.5, 1.5, 3.5) q[1], q[2];
+check_with_param(2.5, 1.5, 3.5, 4) q[1], q[2];
+RX (sqrt(4)) q[3];
+RY (1+2) q_0; // 3
+RY (2*2+1) q_0; // 5
+RY (2/2+1-1) q_0; // 1
+RY(1+2^3*2/2-4) q_0; // 5
+RY(-1) q_0;

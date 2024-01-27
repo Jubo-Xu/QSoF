@@ -58,6 +58,15 @@ ND_EXP_LIST = 48
 
 # Dictionary for binary operator precedences
 binop_precedence = {
+    ",": -1,
+    ")": -1,
+    "+": 1,
+    "-": 1,
+    "*": 2,
+    "/": 2,
+    "^": 3
+}
+binop_precedence_2 = {
     "+": 1,
     "-": 1,
     "*": 2,
@@ -307,7 +316,7 @@ class Parser(Token):
     argument    := id | id "["nninteger"]"
     explist     := exp | explist "," exp
     exp         := ( "+" | "-" )? primary
-    primary     := real | nninteger | pi | id | unaryop"("exp")" | "("binaryop")"
+    primary     := real | nninteger | pi | id | unaryop"("exp")" | "("binaryop")" | binaryop
     binaryop    := exp "+" exp | exp "-" exp | exp "*" exp 
                    | exp "/" exp | exp "^" exp
     unaryop     := sin | cos | tan | exp | ln | sqrt
@@ -969,7 +978,7 @@ class Parser(Token):
     
     '''
     explist     := exp | explist "," exp
-    exp         := ( "+" | "-" )? primary
+    exp         := ( "+" | "-" )? primary | binaryop
     primary     := real | nninteger | pi | id | unaryop"("exp")" | "("binaryop")"
     binaryop    := exp "+" exp | exp "-" exp | exp "*" exp 
                    | exp "/" exp | exp "^" exp
@@ -978,6 +987,15 @@ class Parser(Token):
     # For binary operations, operator precedence parsing is applied
     # Recursive descent parsing for exp = ( "+" | "-" )? primary
     def exp(self):
+        # if (((self.check_TK_kind(self.token_idx)==token.TK_IDENT) or (self.check_TK_kind(self.token_idx)==token.TK_NUM))\
+        #     and(self.token[self.token_idx+1][self.str_idx] in binop_precedence) and (self.token[self.token_idx+1][self.str_idx] != "," or ")")):
+        #     print("check")
+        #     return self.binaryop()
+        # else:
+        #     return self.exp_prim()
+        return self.binaryop()
+        
+    def exp_prim(self):
         if self.consume_operator_str("+"):
             return self.primary()
         if self.consume_operator_str("-"):
@@ -1055,7 +1073,7 @@ class Parser(Token):
         if self.check_TK_kind(self.token_idx) != token.TK_OPERATOR:
             self.error_at(self.token_idx, "This is not an operator")
         # Check whether the current operator is supported
-        if self.token[self.token_idx][self.str_idx] not in binop_precedence:
+        if not self.token[self.token_idx][self.str_idx] in binop_precedence:
             self.error_at(self.token_idx, "This operator is not supported")
         precedence = binop_precedence[self.token[self.token_idx][self.str_idx]]
         return precedence
@@ -1090,9 +1108,8 @@ class Parser(Token):
                 return lhs
             # Now this is a binary operator
             binaryop = self.get_binaryop()
-            self.token_idx += 1
             # Parse the expression after the binary operator
-            rhs = self.exp()
+            rhs = self.exp_prim()
             if rhs is None:
                 self.error_at(self.token_idx, "The expression after the binary operator cannot be empty")
             # If this is a binary operator that binds less tightly with RHS than the operator after RHS, let the pending operator take RHS as its LHS
@@ -1105,7 +1122,7 @@ class Parser(Token):
     # Recursive descent parsing for binaryop
     def binaryop(self):
         # First parse the left hand side
-        lhs = self.exp()
+        lhs = self.exp_prim()
         if lhs is None:
             self.error_at(self.token_idx, "The expression before the binary operator cannot be empty")
         # Then parse the right hand side, the precedence of the first binary operator is 0
@@ -1160,28 +1177,28 @@ class Parser(Token):
         if node.kind == ND_NUM:
             return node.val
         # return the corresponding parameter value if it is an identifier
-        if node.kind == ND_IDENT:
+        elif node.kind == ND_IDENT:
             parameter_name = node.str
             parameter_val = self.gates[self.GATE_DEF_name].params[parameter_name]
             return parameter_val
         # return the pi if it is a pi node
-        if node.kind == ND_PI:
+        elif node.kind == ND_PI:
             return math.pi
         # qubits added to circuit if ND_QREG_DEC is encountered
-        if node.kind == ND_QREG_DEC:
+        elif node.kind == ND_QREG_DEC:
             qubit_name = node.str
             size = self.qregs[qubit_name]
             quantumcircuit.add_qubit(qubit_name, size)
             quantumcircuit.add_qubit_max_time_slice(qubit_name, 0, size)
             return
         # classical bits added to circuit if ND_CREG_DEC is encountered
-        if node.kind == ND_CREG_DEC:
+        elif node.kind == ND_CREG_DEC:
             cbit_name = node.str
             size = self.cregs[cbit_name]
             quantumcircuit.add_creg(cbit_name, size)
             return
         # the control and target qubits will be returned for both argument and idlist
-        if node.kind == ND_QREG:
+        elif node.kind == ND_QREG:
             if node.controlled_with_parameter:
                 control_qreg = node.qregs
                 if self.GATE_define:
@@ -1196,41 +1213,41 @@ class Parser(Token):
                         qregs[i] = self.gates[self.GATE_DEF_name].args[qregs[i][0]]
                 return qregs
         # if the node is a gate declare node, skip it
-        if node.kind == ND_GATE_DEC:
+        elif node.kind == ND_GATE_DEC:
             return
         #### the following code is for the single qubit gates without parameters ####
         # X gate
-        if node.kind == ND_X:
+        elif node.kind == ND_X:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_no_parameter("x", qubit_name, qubit_idx)
         # Y gate
-        if node.kind == ND_Y:
+        elif node.kind == ND_Y:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_no_parameter("y", qubit_name, qubit_idx)
         # Z gate
-        if node.kind == ND_Z:
+        elif node.kind == ND_Z:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_no_parameter("z", qubit_name, qubit_idx)
         # S gate
-        if node.kind == ND_S:
+        elif node.kind == ND_S:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_no_parameter("s", qubit_name, qubit_idx)
         # T gate
-        if node.kind == ND_T:
+        elif node.kind == ND_T:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_no_parameter("t", qubit_name, qubit_idx)
         # H gate
-        if node.kind == ND_H:
+        elif node.kind == ND_H:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
@@ -1238,42 +1255,42 @@ class Parser(Token):
         
         ### The following code is for the single qubit gates with parameters ###
         # Generate the parameters based on explist of Explist node
-        if node.kind == ND_EXP_LIST:
+        elif node.kind == ND_EXP_LIST:
             params = []
             for i in range(len(node.exps)):
                 params.append(self.code_gen(node.exps[i], quantumcircuit))
             return params
             
         # RX gate
-        if node.kind == ND_RX:
+        elif node.kind == ND_RX:
             parameter = self.code_gen(node.left, quantumcircuit)
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_with_parameter("rx", qubit_name, parameter, qubit_idx)
         # RY gate
-        if node.kind == ND_RY:
+        elif node.kind == ND_RY:
             parameter = self.code_gen(node.left, quantumcircuit)
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_with_parameter("ry", qubit_name, parameter, qubit_idx)
         # RZ gate
-        if node.kind == ND_RZ:
+        elif node.kind == ND_RZ:
             parameter = self.code_gen(node.left, quantumcircuit)
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_with_parameter("rz", qubit_name, parameter, qubit_idx)
         # RTHETA gate
-        if node.kind == ND_RTHETA:
+        elif node.kind == ND_RTHETA:
             parameter = self.code_gen(node.left, quantumcircuit)
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_with_parameter("rtheta", qubit_name, parameter, qubit_idx)
         # U gate
-        if node.kind == ND_U:
+        elif node.kind == ND_U:
             parameter = self.code_gen(node.left, quantumcircuit)
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
@@ -1282,42 +1299,42 @@ class Parser(Token):
         
         # The following code is for the controlled gates without parameters
         # CX gate
-        if node.kind == ND_CX:
+        elif node.kind == ND_CX:
             control_qubit = self.code_gen(node.left, quantumcircuit)
             target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_no_parameter("cx", control_qubit, target_name, target_idx)
         # CY gate
-        if node.kind == ND_CY:
+        elif node.kind == ND_CY:
             control_qubit = self.code_gen(node.left, quantumcircuit)
             target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_no_parameter("cy", control_qubit, target_name, target_idx)
         # CZ gate
-        if node.kind == ND_CZ:
+        elif node.kind == ND_CZ:
             control_qubit = self.code_gen(node.left, quantumcircuit)
             target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_no_parameter("cz", control_qubit, target_name, target_idx)
         # CS gate
-        if node.kind == ND_CS:
+        elif node.kind == ND_CS:
             control_qubit = self.code_gen(node.left, quantumcircuit)
             target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_no_parameter("cs", control_qubit, target_name, target_idx)
         # CT gate
-        if node.kind == ND_CT:
+        elif node.kind == ND_CT:
             control_qubit = self.code_gen(node.left, quantumcircuit)
             target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_no_parameter("ct", control_qubit, target_name, target_idx)
         # CH gate
-        if node.kind == ND_CH:
+        elif node.kind == ND_CH:
             control_qubit = self.code_gen(node.left, quantumcircuit)
             target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
@@ -1326,35 +1343,35 @@ class Parser(Token):
         
         ## The following code is for the controlled gates with parameters
         # CRX gate
-        if node.kind == ND_CRX:
+        elif node.kind == ND_CRX:
             parameter = self.code_gen(node.left, quantumcircuit)
             control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_with_parameter("crx", control_qubit, target_name, parameter, target_idx)
         # CRY gate
-        if node.kind == ND_CRY:
+        elif node.kind == ND_CRY:
             parameter = self.code_gen(node.left, quantumcircuit)
             control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_with_parameter("cry", control_qubit, target_name, parameter, target_idx)
         # CRZ gate
-        if node.kind == ND_CRZ:
+        elif node.kind == ND_CRZ:
             parameter = self.code_gen(node.left, quantumcircuit)
             control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_with_parameter("crz", control_qubit, target_name, parameter, target_idx)
         # CRTHETA gate
-        if node.kind == ND_CRTHETA:
+        elif node.kind == ND_CRTHETA:
             parameter = self.code_gen(node.left, quantumcircuit)
             control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_with_parameter("crtheta", control_qubit, target_name, parameter, target_idx)
         # CU gate
-        if node.kind == ND_CU:
+        elif node.kind == ND_CU:
             parameter = self.code_gen(node.left, quantumcircuit)
             control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
@@ -1363,7 +1380,7 @@ class Parser(Token):
         
         ## The following code is for the gate definition
         # Gate definition without parameters
-        if node.kind == ND_GATE_NOEXP:
+        elif node.kind == ND_GATE_NOEXP:
             gate_name = node.str
             arguments = self.code_gen(node.left, quantumcircuit)
             # Update the values of the arguments of this gate to the corresponding keys
@@ -1380,7 +1397,7 @@ class Parser(Token):
             return
         
         # Gate definition with parameters
-        if node.kind == ND_GATE_EXP:
+        elif node.kind == ND_GATE_EXP:
             gate_name = node.str
             explist = self.code_gen(node.left, quantumcircuit)
             arguments = self.code_gen(node.right, quantumcircuit)
@@ -1400,6 +1417,65 @@ class Parser(Token):
                 self.code_gen(self.gates[gate_name].contents[i], quantumcircuit)
             self.GATE_define = False
             return
+
+        ## The following part is for Unary operations
+        # sin
+        elif node.kind == ND_SIN:
+            exp = self.code_gen(node.left, quantumcircuit)
+            return math.sin(exp)
+        
+        # cos
+        elif node.kind == ND_COS:
+            exp = self.code_gen(node.left, quantumcircuit)
+            return math.cos(exp)
+        
+        # tan
+        elif node.kind == ND_TAN:
+            exp = self.code_gen(node.left, quantumcircuit)
+            return math.tan(exp)
+        
+        # exp
+        elif node.kind == ND_EXP:
+            exp = self.code_gen(node.left, quantumcircuit)
+            return math.exp(exp)
+        
+        # ln
+        elif node.kind == ND_LN:
+            exp = self.code_gen(node.left, quantumcircuit)
+            return math.log(exp)
+        
+        # sqrt
+        elif node.kind == ND_SQRT:
+            exp = self.code_gen(node.left, quantumcircuit)
+            return math.sqrt(exp)
+        
+        ## The following part is for binary operations
+        else:
+            # first get the value of the left hand side
+            lhs = self.code_gen(node.left, quantumcircuit)
+            # then get the value of the right hand side
+            rhs = self.code_gen(node.right, quantumcircuit)
+            # add
+            if node.kind == ND_ADD:
+                return lhs + rhs
+        
+            # sub
+            if node.kind == ND_SUB:
+                return lhs - rhs
+        
+            # mul
+            if node.kind == ND_MUL:
+                return lhs * rhs
+        
+            # div
+            if node.kind == ND_DIV:
+                return lhs / rhs
+        
+            # pow
+            if node.kind == ND_POW:
+                return lhs ** rhs
+        
+        
         
         
     # Define the function to generate the quantum circuit

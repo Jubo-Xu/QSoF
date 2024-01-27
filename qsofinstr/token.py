@@ -35,6 +35,12 @@ TK_OPAQUE = 31
 TK_QREG = 32
 TK_CREG = 33
 TK_EOF = 34
+TK_SIN = 35
+TK_COS = 36
+TK_TAN = 37
+TK_LN = 38
+TK_SQRT = 39
+TK_EXP = 40
 
 class Token(object):
     def __init__(self):
@@ -83,8 +89,7 @@ class Token(object):
                     while TK.qasm_str[i] != "\n":
                         i += 1
                     continue
-                else:
-                    raise Exception("Invalid character '/'")
+
             # Check for ;
             if TK.qasm_str[i] == ";":
                 TK.Token.append((TK_OPERATOR, 0, 0, 1, ";", TK.line_count, TK.err_line_idx, i))
@@ -141,6 +146,41 @@ class Token(object):
                 i += 1
                 continue
             
+            # Check for +
+            if TK.qasm_str[i] == "+":
+                if TK.qasm_str[i+1].isspace() or TK.qasm_str[i+1].isdigit() or TK.qasm_str[i+1] == ".":
+                    TK.Token.append((TK_OPERATOR, 0, 0, 1, "+", TK.line_count, TK.err_line_idx, i))
+                    i += 1
+                    continue
+            
+            # Check for -
+            if TK.qasm_str[i] == "-":
+                if TK.qasm_str[i+1].isspace() or TK.qasm_str[i+1].isdigit() or TK.qasm_str[i+1] == ".":
+                    TK.Token.append((TK_OPERATOR, 0, 0, 1, "-", TK.line_count, TK.err_line_idx, i))
+                    i += 1
+                    continue
+            
+            # Check for *
+            if TK.qasm_str[i] == "*":
+                if TK.qasm_str[i+1].isspace() or TK.qasm_str[i+1].isdigit() or TK.qasm_str[i+1] == ".":
+                    TK.Token.append((TK_OPERATOR, 0, 0, 1, "*", TK.line_count, TK.err_line_idx, i))
+                    i += 1
+                    continue
+            
+            # Check for /
+            if TK.qasm_str[i] == "/":
+                if TK.qasm_str[i+1].isspace() or TK.qasm_str[i+1].isdigit() or TK.qasm_str[i+1] == ".":
+                    TK.Token.append((TK_OPERATOR, 0, 0, 1, "/", TK.line_count, TK.err_line_idx, i))
+                    i += 1
+                    continue
+            
+            # Check for ^
+            if TK.qasm_str[i] == "^":
+                if TK.qasm_str[i+1].isspace() or TK.qasm_str[i+1].isdigit() or TK.qasm_str[i+1] == ".":
+                    TK.Token.append((TK_OPERATOR, 0, 0, 1, "^", TK.line_count, TK.err_line_idx, i))
+                    i += 1
+                    continue
+            
             # Check for pi
             if TK.qasm_str[i] == "p" and TK.qasm_str[i+1] == "i":
                 if TK.qasm_str[i+2] == "," or TK.qasm_str[i+2] == ")" or TK.qasm_str[i+2].isspace():
@@ -150,43 +190,43 @@ class Token(object):
             
             # Check for sin
             if TK.qasm_str[i] == "s" and TK.qasm_str[i+1] == "i" and TK.qasm_str[i+2] == "n":
-                if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "sin", TK.line_count, TK.err_line_idx, i))
+                if TK.qasm_str[i+3] == "(" or TK.qasm_str[i+3].isspace():
+                    TK.Token.append((TK_SIN, 0, 0, 3, "sin", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for cos
             if TK.qasm_str[i] == "c" and TK.qasm_str[i+1] == "o" and TK.qasm_str[i+2] == "s":
-                if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "cos", TK.line_count, TK.err_line_idx, i))
+                if TK.qasm_str[i+3] == "(" or TK.qasm_str[i+3].isspace():
+                    TK.Token.append((TK_COS, 0, 0, 3, "cos", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for tan
             if TK.qasm_str[i] == "t" and TK.qasm_str[i+1] == "a" and TK.qasm_str[i+2] == "n":
-                if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "tan", TK.line_count, TK.err_line_idx, i))
+                if TK.qasm_str[i+3] == "(" or TK.qasm_str[i+3].isspace():
+                    TK.Token.append((TK_TAN, 0, 0, 3, "tan", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for exp
             if TK.qasm_str[i] == "e" and TK.qasm_str[i+1] == "x" and TK.qasm_str[i+2] == "p":
-                if TK.qasm_str[i+3] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 3, "exp", TK.line_count, TK.err_line_idx, i))
+                if TK.qasm_str[i+3] == "(" or TK.qasm_str[i+3].isspace():
+                    TK.Token.append((TK_EXP, 0, 0, 3, "exp", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             
             # Check for ln
             if TK.qasm_str[i] == "l" and TK.qasm_str[i+1] == "n":
-                if TK.qasm_str[i+2] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 2, "ln", TK.line_count, TK.err_line_idx, i))
+                if TK.qasm_str[i+2] == "(" or TK.qasm_str[i+2].isspace():
+                    TK.Token.append((TK_LN, 0, 0, 2, "ln", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
             
             # Check for sqrt
             if TK.qasm_str[i] == "s" and TK.qasm_str[i+1] == "q" and TK.qasm_str[i+2] == "r" and TK.qasm_str[i+3] == "t":
-                if TK.qasm_str[i+4] == "(":
-                    TK.Token.append((TK_OPERATOR, 0, 0, 4, "sqrt", TK.line_count, TK.err_line_idx, i))
+                if TK.qasm_str[i+4] == "(" or TK.qasm_str[i+4].isspace():
+                    TK.Token.append((TK_SQRT, 0, 0, 4, "sqrt", TK.line_count, TK.err_line_idx, i))
                     i += 4
                     continue
             
@@ -436,7 +476,7 @@ class Token(object):
                             exp = 10*exp + int(TK.qasm_str[i])
                             i += 1
                     else:
-                        raise Exception("Invalid number")
+                        TK.annotate_error(TK.qasm_str, i, "Invalid number", TK.line_count, TK.err_line_idx)
                 TK.Token.append((TK_NUM, float(num), float(exp), i-i_init, TK.qasm_str[i_init:i], TK.line_count, TK.err_line_idx, i_init))
                 continue
             
