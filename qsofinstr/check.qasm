@@ -2,6 +2,9 @@
 qreg q[4];
 qreg q_0[1];
 
+// creg declare
+creg c[4];
+
 // gate define
 gate check_no_param a, b {
     X a;
@@ -51,3 +54,5 @@ RZ(sqrt(2*2/2+2)) q_0;
 RZ(-(1+3)+(1*2)) q_0;
 CX q[0], q[1] : q[2];
 CY q[0], q[2], q[3] : q[1];
+measure q[1] -> c[1];
+measure q -> c;

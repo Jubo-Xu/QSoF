@@ -66,13 +66,6 @@ binop_precedence = {
     "/": 2,
     "^": 3
 }
-binop_precedence_2 = {
-    "+": 1,
-    "-": 1,
-    "*": 2,
-    "/": 2,
-    "^": 3
-}
 
 class Node:
     def __init__(self, kind):
@@ -181,6 +174,8 @@ class Parser(Token):
         # This is a flag to indicate whether the current state is an opaque declaration, which serves
         # as the same purpose as the GATE_declare flag
         self.OPAQUE_declare = False
+        # This is a flag to indicate that the current state is a Measurement operation
+        self.MEASURE = False
         # This variable is used in together with the Gate declare and Opaque declare flags
         self.GATE_name = ""
         # This variable is used for the gate definition
@@ -465,7 +460,7 @@ class Parser(Token):
             self.expect("[")
             self.check_num_error("creg size")
             size = int(self.token[self.token_idx][self.val_idx])
-            self.qregs[name] = size
+            self.cregs[name] = size
             self.token_idx += 1
             self.expect("]")
             self.expect(";")
@@ -552,6 +547,7 @@ class Parser(Token):
                     self.error_at(self.token_idx, "The qreg argument and the destination are missing")
                 else:
                     self.error_at(self.token_idx, "The qreg argument cannot be this type")
+            self.MEASURE = True
             node_lhs = self.argument()
             self.expect("->")
             # Check whether the destination is missing or wrong type is used
@@ -561,6 +557,18 @@ class Parser(Token):
                 else:
                     self.error_at(self.token_idx, "The creg destination cannot be this type")
             node_rhs = self.argument_c()
+            # Check whether the qreg and creg are of the same size if they are not indexed
+            if node_lhs.qregs[0][1] == -1 and node_rhs.cregs[0][1] == -1:
+                if self.qregs[node_lhs.qregs[0][0]] != self.cregs[node_rhs.cregs[0][0]]:
+                    self.error_at(self.token_idx-1, "The qreg and creg should be of the same size for measurement")
+            # Check whether the qreg and creg are of the same size if only one of them is indexed
+            if node_lhs.qregs[0][1] == -1 and node_rhs.cregs[0][1] != -1:
+                if self.qregs[node_lhs.qregs[0][0]] != 1:
+                    self.error_at(self.token_idx-4, "Multiple qubits cannot be measured into a single bit")
+            if node_lhs.qregs[0][1] != -1 and node_rhs.cregs[0][1] == -1:
+                if self.cregs[node_rhs.cregs[0][0]] != 1:
+                    self.error_at(self.token_idx-1, "Single qubit cannot be measured into multiple bits")
+            self.MEASURE = False
             self.expect(";")
             node_qof = Parser.create_node(ND_MEASURE, node_lhs, node_rhs)
             return node_qof
@@ -610,7 +618,7 @@ class Parser(Token):
             return node_argument
         else:
             # Check if the qreg is not indexed then it should be a qubit instead of a register
-            if (not self.GATE_define) and (self.qregs[name] != 1):
+            if (not self.GATE_define) and (self.qregs[name] != 1) and (not self.MEASURE):
                 self.error_at(self.token_idx, "The qreg "+name+" should be indexed")
             node_argument = Parser.create_node_qreg((name, -1))
             return node_argument
@@ -640,7 +648,7 @@ class Parser(Token):
             return node_argument
         else:
             # Check if the creg is not indexed then it should be a bit instead of a register
-            if self.cregs[name] != 1:
+            if (self.cregs[name] != 1) and (not self.MEASURE):
                 self.error_at(self.token_idx, "The creg "+name+" should be indexed")
             node_argument = Parser.create_node_creg((name, -1))
             return node_argument
@@ -1222,6 +1230,9 @@ class Parser(Token):
                     for i in range(len(qregs)):
                         qregs[i] = self.gates[self.GATE_DEF_name].args[qregs[i][0]]
                 return qregs
+        # creg node
+        elif node.kind == ND_CREG:
+            return node.cregs
         # if the node is a gate declare node, skip it
         elif node.kind == ND_GATE_DEC:
             return
@@ -1426,6 +1437,27 @@ class Parser(Token):
             for i in range(len(self.gates[gate_name].contents)):
                 self.code_gen(self.gates[gate_name].contents[i], quantumcircuit)
             self.GATE_define = False
+            return
+        
+        ## The following code is for the measurement
+        elif node.kind == ND_MEASURE:
+            qregs = self.code_gen(node.left, quantumcircuit)
+            cregs = self.code_gen(node.right, quantumcircuit)
+            # Check whether the all the indexes of the qregs are mapped to the cregs
+            if qregs[0][1] == -1 and cregs[0][1] == -1:
+                if self.qregs[qregs[0][0]] != 1:
+                    # Locally store the name of the qreg and creg
+                    qreg_name = qregs[0][0]
+                    creg_name = cregs[0][0]
+                    # Remove the current element of qregs and cregs list
+                    qregs.pop()
+                    cregs.pop()
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qreg_name]):
+                        qregs.append((qreg_name, i))
+                        cregs.append((creg_name, i))
+            # Add the measurement to the quantum circuit
+            quantumcircuit.add_measurement(qregs, cregs)
             return
 
         ## The following part is for Unary operations
