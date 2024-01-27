@@ -176,6 +176,8 @@ class Parser(Token):
         self.OPAQUE_declare = False
         # This is a flag to indicate that the current state is a Measurement operation
         self.MEASURE = False
+        # This is a flag to indicate that the current state is a Reset operation
+        self.RESET = False
         # This variable is used in together with the Gate declare and Opaque declare flags
         self.GATE_name = ""
         # This variable is used for the gate definition
@@ -580,7 +582,10 @@ class Parser(Token):
                     self.error_at(self.token_idx, "The qreg argument is missing")
                 else:
                     self.error_at(self.token_idx, "The qreg argument cannot be this type")
+            self.RESET = True
             node_lhs = self.argument()
+            self.expect(";")
+            self.RESET = False
             node_qof = Parser.create_node(ND_RESET, node_lhs)
             return node_qof
         else:
@@ -618,7 +623,7 @@ class Parser(Token):
             return node_argument
         else:
             # Check if the qreg is not indexed then it should be a qubit instead of a register
-            if (not self.GATE_define) and (self.qregs[name] != 1) and (not self.MEASURE):
+            if (not self.GATE_define) and (self.qregs[name] != 1) and (not self.MEASURE) and (not self.RESET):
                 self.error_at(self.token_idx, "The qreg "+name+" should be indexed")
             node_argument = Parser.create_node_qreg((name, -1))
             return node_argument
@@ -1458,6 +1463,22 @@ class Parser(Token):
                         cregs.append((creg_name, i))
             # Add the measurement to the quantum circuit
             quantumcircuit.add_measurement(qregs, cregs)
+            return
+        
+        ## The following code is for the reset 
+        elif node.kind == ND_RESET:
+            qregs = self.code_gen(node.left, quantumcircuit)
+            # Check whether the qreg is not indexed and the size of the qreg is not 1, if so, reset all the qubits
+            if qregs[0][1] == -1 and self.qregs[qregs[0][0]] != 1:
+                # Locally store the name of the qreg
+                qreg_name = qregs[0][0]
+                # Remove the current element of qregs list
+                qregs.pop()
+                # loop through all the qubits 
+                for i in range(self.qregs[qreg_name]):
+                    qregs.append((qreg_name, i))
+            # Add the reset to the quantum circuit
+            quantumcircuit.add_reset(qregs)
             return
 
         ## The following part is for Unary operations

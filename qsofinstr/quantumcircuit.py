@@ -212,7 +212,29 @@ class Quantum_circuit:
             # Add the qubit of current timeslice index to the creg
             self.cregs[creg_names[i]][f"timeslice_{max_time_slice}"] = qubit_names[i]
             # Set the maximum timeslice index for the circuit
-            self.max_time_slice = max(self.max_time_slice, max_time_slice)
+        self.max_time_slice = max(self.max_time_slice, max_time_slice)
+    
+    # Add the reset operation to the circuit
+    def add_reset(self, qubit):
+        max_time_slice = 0
+        qubit_names = []
+        for i in range(len(qubit)):
+            # Get the qubit name
+            qubit_name = qubit[i][0] + f"[{qubit[i][1]}]" if qubit[i][1] != -1 else qubit[i][0]
+            qubit_names.append(qubit_name)
+            # Set the maximum timeslice index for the current qubit
+            time_slice = self.qubit_max_time_slice[qubit_name] + 1
+            max_time_slice = time_slice if time_slice > max_time_slice else max_time_slice
+        for i in range(len(qubit_names)):
+            self.qubit_max_time_slice[qubit_names[i]] = max_time_slice
+            # Create a new timeslice node for the current qubit
+            time_slice_node = Time_slice_node("reset")
+            time_slice_node.time_slice_index = max_time_slice
+            time_slice_node.reset = True
+            # Add the new timeslice node to the circuit
+            self.qubits[qubit_names[i]][f"timeslice_{max_time_slice}"] = time_slice_node
+            # Set the maximum timeslice index for the circuit
+        self.max_time_slice = max(self.max_time_slice, max_time_slice)
         
     
     # Define the function to draw the draft quantum circuit for testing
@@ -236,8 +258,12 @@ class Quantum_circuit:
             for qubit in self.qubits:
                 if f"timeslice_{i}" in self.qubits[qubit]:
                     if pos_idx == 0:
+                        # Check for the reset operation
+                        if self.qubits[qubit][f"timeslice_{i}"].reset:
+                            circuit_str += "reset"
+                            operation_len = 5
                         # Check for the measurement operation
-                        if self.qubits[qubit][f"timeslice_{i}"].measurement:
+                        elif self.qubits[qubit][f"timeslice_{i}"].measurement:
                             creg = self.qubits[qubit][f"timeslice_{i}"].connected_cregs
                             creg_names = f"{', '.join(map(str, creg))}"
                             circuit_str += "M -> "+creg_names
@@ -263,8 +289,12 @@ class Quantum_circuit:
                             circuit_str += name
                             operation_len = len(name)
                     else:
+                        # Check for the reset operation
+                        if self.qubits[qubit][f"timeslice_{i}"].reset:
+                            circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + "reset"
+                            operation_len = 5
                         # Check for the measurement operation
-                        if self.qubits[qubit][f"timeslice_{i}"].measurement:
+                        elif self.qubits[qubit][f"timeslice_{i}"].measurement:
                             creg = self.qubits[qubit][f"timeslice_{i}"].connected_cregs
                             creg_names = f"{', '.join(map(str, creg))}"
                             circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + "M -> "+creg_names

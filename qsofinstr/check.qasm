@@ -56,3 +56,5 @@ CX q[0], q[1] : q[2];
 CY q[0], q[2], q[3] : q[1];
 measure q[1] -> c[1];
 measure q -> c;
+X q[1];
+reset q;
