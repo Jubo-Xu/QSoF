@@ -492,7 +492,7 @@ class Token(object):
     @staticmethod
     def annotate_error(input_string, error_index, error_message, line_idx, line_start):
         # Check if the index is within the bounds of the string
-        if error_index < 0 or error_index >= len(input_string):
+        if error_index < 0 or error_index > len(input_string):
             raise ValueError("Error index out of bounds")
         # Find the end index of the line containing the error
         line_end = 0

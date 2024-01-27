@@ -704,16 +704,23 @@ class Parser(Token):
         # Check whether the first argument is missing
         if self.check_operator_str(self.token_idx, ","):
             self.error_at(self.token_idx, "The first argument of "+name+" is missing")
-        argument_lhs = self.argument()
-        self.expect(",")
-        # Check whether the second argument is missing
-        if self.check_operator_str(self.token_idx, ";"):
-            self.error_at(self.token_idx, "The second argument of "+name+" is missing")
-        target_idx = self.token_idx
-        argument_rhs = self.argument()
-        # Check whether the first argument is equal to the second argument
-        if argument_lhs.qregs[0][0] == argument_rhs.qregs[0][0] and argument_lhs.qregs[0][1] == argument_rhs.qregs[0][1]:
-            self.error_at(target_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
+        # argument_lhs = self.argument()
+        # self.expect(",")
+        argument_rhs = None
+        argument_lhs = self.idlist_qubit()
+        if len(argument_lhs.qregs) == 2 and self.check_operator_str(self.token_idx, ";"):
+            argument_rhs = Parser.create_node_qreg(argument_lhs.qregs[1])
+            argument_lhs.qregs.pop()
+            target_idx = self.token_idx
+            # Check whether the first argument is equal to the second argument
+            if argument_lhs.qregs[0][0] == argument_rhs.qregs[0][0] and argument_lhs.qregs[0][1] == argument_rhs.qregs[0][1]:
+                self.error_at(target_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
+        else:
+            self.expect(":")
+            # Check whether the second argument is missing
+            if self.check_operator_str(self.token_idx, ";"):
+                self.error_at(self.token_idx, "The second argument of "+name+" is missing")
+            argument_rhs = self.argument()
         self.expect(";")
         node_uop = Parser.create_node(kind, argument_lhs, argument_rhs)
         return node_uop
@@ -731,17 +738,24 @@ class Parser(Token):
         # Check whether the first argument is missing
         if self.check_operator_str(self.token_idx, ","):
             self.error_at(self.token_idx, "The first argument of "+name+" is missing")
-        argument_control = self.argument()
+        # argument_control = self.argument()
+        # self.expect(",")
+        argument_target = None
+        argument_control = self.idlist_qubit()
+        if len(argument_control.qregs) == 2 and self.check_operator_str(self.token_idx, ";"):
+            argument_target = Parser.create_node_qreg(argument_control.qregs[1])
+            argument_control.qregs.pop()
+            target_idx = self.token_idx
+            # Check whether the first argument is equal to the second argument
+            if argument_control.qregs[0][0] == argument_target.qregs[0][0] and argument_control.qregs[0][1] == argument_target.qregs[0][1]:
+                self.error_at(target_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
+        else:
+            self.expect(":")
+            # Check whether the second argument is missing
+            if self.check_operator_str(self.token_idx, ";"):
+                self.error_at(self.token_idx, "The second argument of "+name+" is missing")
+                argument_target = self.argument()
         argument_control.controlled_with_parameter = True
-        self.expect(",")
-        # Check whether the second argument is missing
-        if self.check_operator_str(self.token_idx, ";"):
-            self.error_at(self.token_idx, "The second argument of "+name+" is missing")
-        target_idx = self.token_idx
-        argument_target = self.argument()
-        # Check whether the first argument is equal to the second argument
-        if argument_control.qregs[0][0] == argument_target.qregs[0][0] and argument_control.qregs[0][1] == argument_target.qregs[0][1]:
-            self.error_at(target_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
         self.expect(";")
         argument_control.add_left(argument_target)
         node_uop = Parser.create_node(kind, explist, argument_control)

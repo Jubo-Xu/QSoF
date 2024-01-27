@@ -18,6 +18,7 @@ gate check_with_param (param1, param2, param3, param4) a, b{
     RZ(param1+param2) b;
 }
 
+
 // gate declare
 X q[0];
 X q[1];
@@ -48,3 +49,5 @@ RY(-1) q_0;
 RY (exp(0)) q_0;
 RZ(sqrt(2*2/2+2)) q_0;
 RZ(-(1+3)+(1*2)) q_0;
+CX q[0], q[1] : q[2];
+CY q[0], q[2], q[3] : q[1];
