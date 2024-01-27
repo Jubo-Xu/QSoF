@@ -15,6 +15,7 @@ gate check_with_param (param1, param2, param3, param4) a, b{
     RZ(param2) b;
     CRX(param3) a, b;
     RY(sqrt(param4)) b;
+    RZ(param1+param2) b;
 }
 
 // gate declare
@@ -44,3 +45,6 @@ RY (2*2+1) q_0; // 5
 RY (2/2+1-1) q_0; // 1
 RY(1+2^3*2/2-4) q_0; // 5
 RY(-1) q_0;
+RY (exp(0)) q_0;
+RZ(sqrt(2*2/2+2)) q_0;
+RZ(-(1+3)+(1*2)) q_0;

@@ -978,21 +978,16 @@ class Parser(Token):
     
     '''
     explist     := exp | explist "," exp
-    exp         := ( "+" | "-" )? primary | binaryop
+    exp         := binaryop
+    exp_prim    := ( "+" | "-" )? primary
     primary     := real | nninteger | pi | id | unaryop"("exp")" | "("binaryop")"
-    binaryop    := exp "+" exp | exp "-" exp | exp "*" exp 
-                   | exp "/" exp | exp "^" exp
+    binaryop    := exp_prim "+" exp_prim | exp_prim "-" exp_prim | exp_prim "*" exp_prim 
+                   | exp_prim "/" exp_prim | exp_prim "^" exp_prim
     unaryop     := sin | cos | tan | exp | ln | sqrt'''
     
     # For binary operations, operator precedence parsing is applied
     # Recursive descent parsing for exp = ( "+" | "-" )? primary
     def exp(self):
-        # if (((self.check_TK_kind(self.token_idx)==token.TK_IDENT) or (self.check_TK_kind(self.token_idx)==token.TK_NUM))\
-        #     and(self.token[self.token_idx+1][self.str_idx] in binop_precedence) and (self.token[self.token_idx+1][self.str_idx] != "," or ")")):
-        #     print("check")
-        #     return self.binaryop()
-        # else:
-        #     return self.exp_prim()
         return self.binaryop()
         
     def exp_prim(self):
@@ -1055,6 +1050,7 @@ class Parser(Token):
         elif self.check_operator_str(self.token_idx, "("):
             self.consume_operator_str("(")
             node_primary = self.binaryop()
+            self.expect(")")
             return node_primary
         # Recursive descent parsing for unaryop"("exp")"
         else:
