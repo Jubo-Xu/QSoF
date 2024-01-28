@@ -445,7 +445,7 @@ class Token(object):
                 ident = TK.qasm_str[i]
                 err_i = i
                 i += 1
-                while TK.is_alnum(TK.qasm_str[i]) or TK.qasm_str[i].isdigit():
+                while (i < len(TK.qasm_str))and(TK.is_alnum(TK.qasm_str[i]) or TK.qasm_str[i].isdigit()):
                     ident += TK.qasm_str[i]
                     i += 1
                 TK.Token.append((TK_IDENT, 0, 0, len(ident), ident, TK.line_count, TK.err_line_idx, err_i))

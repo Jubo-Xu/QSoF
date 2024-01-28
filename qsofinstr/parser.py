@@ -1249,11 +1249,9 @@ class Parser(Token):
                 target_qreg = self.code_gen(node.left, quantumcircuit)
                 return control_qreg, target_qreg
             else:
-                # qregs = node.qregs
                 qregs = []
                 if self.GATE_define:
                     for i in range(len(node.qregs)):
-                        # qregs[i] = self.gates[self.GATE_DEF_name].args[qregs[i][0]]
                         qregs.append(self.gates[self.GATE_DEF_name].args[node.qregs[i][0]])
                     return qregs
                 else:
