@@ -345,7 +345,7 @@ class Quantum_circuit:
                     if_str = ""
                     # Check if the current qubit is under the if condition
                     if self.qubits[qubit][f"timeslice_{i}"].if_flag:
-                        if_str = f" |{self.qubits[qubit][f'timeslice_{i}'].if_creg}={self.qubits[qubit][f'timeslice_{i}'].if_num}"
+                        if_str = f"|{self.qubits[qubit][f'timeslice_{i}'].if_creg}={self.qubits[qubit][f'timeslice_{i}'].if_num}"
                     if pos_idx == 0:
                         # Check for the reset operation
                         if self.qubits[qubit][f"timeslice_{i}"].reset:

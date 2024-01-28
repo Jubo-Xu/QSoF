@@ -434,6 +434,7 @@ class Parser(Token):
                 self.error_at(self.token_idx, "The condition should be a single bit")
         self.expect("==")
         condition_rhs = self.create_node_num(self.token[self.token_idx][self.val_idx])
+        self.token_idx += 1
         node_condition = Parser.create_node(ND_EQUAL, condition_lhs, condition_rhs)
         return node_condition
     
@@ -1248,11 +1249,15 @@ class Parser(Token):
                 target_qreg = self.code_gen(node.left, quantumcircuit)
                 return control_qreg, target_qreg
             else:
-                qregs = node.qregs
+                # qregs = node.qregs
+                qregs = []
                 if self.GATE_define:
-                    for i in range(len(qregs)):
-                        qregs[i] = self.gates[self.GATE_DEF_name].args[qregs[i][0]]
-                return qregs
+                    for i in range(len(node.qregs)):
+                        # qregs[i] = self.gates[self.GATE_DEF_name].args[qregs[i][0]]
+                        qregs.append(self.gates[self.GATE_DEF_name].args[node.qregs[i][0]])
+                    return qregs
+                else:
+                    return node.qregs
         # creg node
         elif node.kind == ND_CREG:
             return node.cregs
@@ -1462,7 +1467,6 @@ class Parser(Token):
             Gate_def_flag_original = self.GATE_define
             self.GATE_define = True
             self.GATE_DEF_name = gate_name
-            print(self.GATE_DEF_name)
             for i in range(len(self.gates[gate_name].contents)):
                 self.code_gen(self.gates[gate_name].contents[i], quantumcircuit)
             self.GATE_define = Gate_def_flag_original
