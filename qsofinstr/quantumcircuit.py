@@ -235,6 +235,27 @@ class Quantum_circuit:
             self.qubits[qubit_names[i]][f"timeslice_{max_time_slice}"] = time_slice_node
             # Set the maximum timeslice index for the circuit
         self.max_time_slice = max(self.max_time_slice, max_time_slice)
+    
+    # Add the barrier operation to the circuit
+    def add_barrier(self, qubit):
+        max_time_slice = 0
+        qubit_names = []
+        for i in range(len(qubit)):
+            # Get the qubit name
+            qubit_name = qubit[i][0] + f"[{qubit[i][1]}]" if qubit[i][1] != -1 else qubit[i][0]
+            qubit_names.append(qubit_name)
+            # Set the maximum timeslice index for the current qubit
+            time_slice = self.qubit_max_time_slice[qubit_name] + 1
+            max_time_slice = time_slice if time_slice > max_time_slice else max_time_slice
+        for i in range(len(qubit_names)):
+            self.qubit_max_time_slice[qubit_names[i]] = max_time_slice
+            # Create a new timeslice node for the current qubit
+            time_slice_node = Time_slice_node("BARRIER")
+            time_slice_node.time_slice_index = max_time_slice
+            # Add the new timeslice node to the circuit
+            self.qubits[qubit_names[i]][f"timeslice_{max_time_slice}"] = time_slice_node
+            # Set the maximum timeslice index for the circuit
+        self.max_time_slice = max(self.max_time_slice, max_time_slice)
         
     
     # Define the function to draw the draft quantum circuit for testing

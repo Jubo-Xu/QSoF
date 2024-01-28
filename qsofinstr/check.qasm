@@ -1,6 +1,7 @@
 // qreg declare
 qreg q[4];
 qreg q_0[1];
+qreg q1[3];
 
 // creg declare
 creg c[4];
@@ -58,3 +59,8 @@ measure q[1] -> c[1];
 measure q -> c;
 X q[1];
 reset q;
+Y q[2];
+barrier q[1];
+barrier q;
+X q[2];
+barrier q, q_0, q1;

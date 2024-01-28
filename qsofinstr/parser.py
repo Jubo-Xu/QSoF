@@ -55,6 +55,7 @@ ND_SQRT = 45
 ND_PI = 46
 ND_IDENT = 47
 ND_EXP_LIST = 48
+ND_BARRIER = 49
 
 # Dictionary for binary operator precedences
 binop_precedence = {
@@ -262,6 +263,7 @@ class Parser(Token):
                    | opaque id "(" ")" idlist ";" | opaque id "("idlist")" idlist ";"
                    | qop
                    | if "("condition")" qop
+                   | barrier idlist ";"
     condition   := id == nninteger
 
     decl        := qreg id "["nninteger"]" ";" | creg id "["nninteger"]" ";"
@@ -402,6 +404,13 @@ class Parser(Token):
                 self.error_at(self.token_idx, "The statement of if cannot be empty")
             qop = self.qop()
             node_stmt = Parser.create_node(ND_IF, condition, qop)
+            return node_stmt
+        # Recursive descent parsing for 'barrier idlist ;'
+        elif self.check_TK_kind(self.token_idx) == token.TK_BARRIER:
+            self.token_idx += 1
+            args = self.idlist_qubit()
+            self.expect(";")
+            return Parser.create_node(ND_BARRIER, args)
         # Recursive descent parsing for 'qop'
         else:
             return self.qop()
@@ -1480,7 +1489,21 @@ class Parser(Token):
             # Add the reset to the quantum circuit
             quantumcircuit.add_reset(qregs)
             return
-
+        ## The following code is for the barrier
+        elif node.kind == ND_BARRIER:
+            qregs = self.code_gen(node.left, quantumcircuit)
+            # Check whether the qreg is not indexed and the size of the qreg is not 1, if so, reset all the qubits
+            length = len(qregs)
+            for i in range(length):
+                if qregs[i][1] == -1 and self.qregs[qregs[i][0]] != 1:
+                    qreg_name = qregs[i][0]
+                    qregs[i] = (qreg_name, 0)
+                    # loop through all the qubits 
+                    for j in range(1, self.qregs[qreg_name]):
+                        qregs.append((qreg_name, j))
+            # Add the barrier to the quantum circuit
+            quantumcircuit.add_barrier(qregs)
+            return
         ## The following part is for Unary operations
         # sin
         elif node.kind == ND_SIN:
