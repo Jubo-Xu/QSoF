@@ -35,6 +35,9 @@ class Time_slice_node:
         self.with_parameter = False # Flag to indicate if the gate has parameter
         self.measurement = False # Flag to indicate if the gate is a measurement operation
         self.reset = False # Flag to indicate if the gate is a reset operation
+        self.if_flag = False # Flag to indicate if the gate is conditioned
+        self.if_creg = "" # The name of the creg that is used to condition the gate
+        self.if_num = 0 # The number of the condition
     
     def add_connected_qubit(self, qubits):
         if isinstance(qubits, list):
@@ -89,17 +92,23 @@ class Quantum_circuit:
                 self.qubit_max_time_slice[qubit_name + f"[{size}]"] = time_slice_index
     
     # Add a new no parameter single qubit gate to the circuit
-    def add_single_qubit_gate_no_parameter(self, gate_name, qubit_name, index=-1):
+    def add_single_qubit_gate_no_parameter(self, gate_name, qubit_name, index=-1, if_creg=None, if_num=0, if_flag=False):
         qubit = qubit_name + f"[{index}]" if index != -1 else qubit_name
         time_slice = self.qubit_max_time_slice[qubit] + 1
         self.qubit_max_time_slice[qubit] = time_slice
         time_slice_node = Time_slice_node(gate_name)
         time_slice_node.time_slice_index = time_slice
+        # Check if the gate is conditioned
+        if if_flag:
+            if_creg_name = if_creg[0] + f"[{if_creg[1]}]" if if_creg[1] != -1 else if_creg[0]
+            time_slice_node.if_flag = True
+            time_slice_node.if_num = if_num
+            time_slice_node.if_creg = if_creg_name
         self.qubits[qubit][f"timeslice_{time_slice}"] = time_slice_node
         self.max_time_slice = max(self.max_time_slice, time_slice)  
     
     # Add a new single qubit gate with parameter to the circuit
-    def add_single_qubit_gate_with_parameter(self, gate_name, qubit_name, parameter, index = -1):
+    def add_single_qubit_gate_with_parameter(self, gate_name, qubit_name, parameter, index = -1, if_creg=None, if_num=0, if_flag=False):
         qubit = qubit_name + f"[{index}]" if index != -1 else qubit_name
         time_slice = self.qubit_max_time_slice[qubit] + 1
         self.qubit_max_time_slice[qubit] = time_slice
@@ -107,11 +116,21 @@ class Quantum_circuit:
         time_slice_node.with_parameter = True
         time_slice_node.time_slice_index = time_slice
         time_slice_node.add_parameter(parameter)
+        if if_flag:
+            if_creg_name = if_creg[0] + f"[{if_creg[1]}]" if if_creg[1] != -1 else if_creg[0]
+            time_slice_node.if_flag = True
+            time_slice_node.if_num = if_num
+            time_slice_node.if_creg = if_creg_name
         self.qubits[qubit][f"timeslice_{time_slice}"] = time_slice_node
         self.max_time_slice = max(self.max_time_slice, time_slice)
     
     # Add a new controlled single qubit gate without parameter to the circuit
-    def add_controlled_gate_no_parameter(self, gate_name, control_qubit, target_qubit, target_index=-1):
+    def add_controlled_gate_no_parameter(self, gate_name, control_qubit, target_qubit, target_index=-1, if_creg=None, if_num=0, if_flag=False):
+        if_creg_name = ""
+        if_creg_num = 0
+        if if_flag:
+            if_creg_name = if_creg[0] + f"[{if_creg[1]}]" if if_creg[1] != -1 else if_creg[0]
+            if_creg_num = if_num
         # create a new list that stores all the qubit names, the first element is the target qubit
         qubit_names = [target_qubit + f"[{target_index}]" if target_index != -1 else target_qubit]
         # add the control qubit to the list and find the maximum timeslice index
@@ -130,6 +149,11 @@ class Quantum_circuit:
         time_slice_node_target.time_slice_index = max_time_slice
         time_slice_node_target.controlled_operation = True # Set the controlled_operation flag to True to indicate this is a controlled gate
         time_slice_node_target.add_connected_qubit(qubit_names[1:])
+        # Add the conditioned variables to the target timeslice node
+        if if_flag:
+            time_slice_node_target.if_flag = True
+            time_slice_node_target.if_num = if_creg_num
+            time_slice_node_target.if_creg = if_creg_name
         # Add the new timeslice node of the target qubit to the circuit
         self.qubits[qubit_names[0]][f"timeslice_{max_time_slice}"] = time_slice_node_target
         # Loop through all the control qubits and add the new timeslice node to the circuit with the current timeslice index
@@ -142,12 +166,22 @@ class Quantum_circuit:
             time_slice_node_control.controlled_operation = True # Set the controlled_operation flag to True to indicate this is a controlled gate
             time_slice_node_control.add_connected_qubit(qubit_names[0:i])
             time_slice_node_control.add_connected_qubit(qubit_names[i+1:])
+            # Add the conditioned variables to the control timeslice node
+            if if_flag:
+                time_slice_node_control.if_flag = True
+                time_slice_node_control.if_num = if_creg_num
+                time_slice_node_control.if_creg = if_creg_name
             self.qubits[qubit][f"timeslice_{max_time_slice}"] = time_slice_node_control
         # Update the maximum timeslice index of the circuit
         self.max_time_slice = max(self.max_time_slice, max_time_slice)
     
     # Add a new controlled single qubit gate with parameter to the circuit
-    def add_controlled_gate_with_parameter(self, gate_name, control_qubit, target_qubit, parameter, target_index=-1):
+    def add_controlled_gate_with_parameter(self, gate_name, control_qubit, target_qubit, parameter, target_index=-1, if_creg=None, if_num=0, if_flag=False):
+        if_creg_name = ""
+        if_creg_num = 0
+        if if_flag:
+            if_creg_name = if_creg[0] + f"[{if_creg[1]}]" if if_creg[1] != -1 else if_creg[0]
+            if_creg_num = if_num
         # create a new list that stores all the qubit names, the first element is the target qubit
         qubit_names = [target_qubit + f"[{target_index}]" if target_index != -1 else target_qubit]
         # add the control qubit to the list and find the maximum timeslice index
@@ -168,6 +202,11 @@ class Quantum_circuit:
         time_slice_node_target.time_slice_index = max_time_slice
         time_slice_node_target.controlled_operation = True # Set the controlled_operation flag to True to indicate this is a controlled gate
         time_slice_node_target.add_connected_qubit(qubit_names[1:])
+        # Add the conditioned variables to the target timeslice node
+        if if_flag:
+            time_slice_node_target.if_flag = True
+            time_slice_node_target.if_num = if_creg_num
+            time_slice_node_target.if_creg = if_creg_name
         # Add the new timeslice node of the target qubit to the circuit
         self.qubits[qubit_names[0]][f"timeslice_{max_time_slice}"] = time_slice_node_target
         # Loop through all the control qubits and add the new timeslice node to the circuit with the current timeslice index
@@ -182,15 +221,25 @@ class Quantum_circuit:
             time_slice_node_control.controlled_operation = True # Set the controlled_operation flag to True to indicate this is a controlled gate
             time_slice_node_control.add_connected_qubit(qubit_names[0:i])
             time_slice_node_control.add_connected_qubit(qubit_names[i+1:])
+            # Add the conditioned variables to the control timeslice node
+            if if_flag:
+                time_slice_node_control.if_flag = True
+                time_slice_node_control.if_num = if_creg_num
+                time_slice_node_control.if_creg = if_creg_name
             self.qubits[qubit][f"timeslice_{max_time_slice}"] = time_slice_node_control
         # Update the maximum timeslice index of the circuit
         self.max_time_slice = max(self.max_time_slice, max_time_slice)
     
     # Add the measurement operation to the circuit
-    def add_measurement(self, qubit, creg):
+    def add_measurement(self, qubit, creg, if_creg=None, if_num=0, if_flag=False):
         max_time_slice = 0
         qubit_names = []
         creg_names = []
+        if_creg_name = ""
+        if_creg_num = 0
+        if if_flag:
+            if_creg_name = if_creg[0] + f"[{if_creg[1]}]" if if_creg[1] != -1 else if_creg[0]
+            if_creg_num = if_num
         for i in range(len(qubit)):
             # Get the qubit name and the creg name
             qubit_name = qubit[i][0] + f"[{qubit[i][1]}]" if qubit[i][1] != -1 else qubit[i][0]
@@ -207,6 +256,11 @@ class Quantum_circuit:
             time_slice_node.time_slice_index = max_time_slice
             time_slice_node.connected_cregs.append(creg_names[i])
             time_slice_node.measurement = True
+            # Add the conditioned variables to the measurement timeslice node
+            if if_flag:
+                time_slice_node.if_flag = True
+                time_slice_node.if_num = if_creg_num
+                time_slice_node.if_creg = if_creg_name
             # Add the new timeslice node to the circuit
             self.qubits[qubit_names[i]][f"timeslice_{max_time_slice}"] = time_slice_node
             # Add the qubit of current timeslice index to the creg
@@ -215,9 +269,14 @@ class Quantum_circuit:
         self.max_time_slice = max(self.max_time_slice, max_time_slice)
     
     # Add the reset operation to the circuit
-    def add_reset(self, qubit):
+    def add_reset(self, qubit, if_creg=None, if_num=0, if_flag=False):
         max_time_slice = 0
         qubit_names = []
+        if_creg_name = ""
+        if_creg_num = 0
+        if if_flag:
+            if_creg_name = if_creg[0] + f"[{if_creg[1]}]" if if_creg[1] != -1 else if_creg[0]
+            if_creg_num = if_num
         for i in range(len(qubit)):
             # Get the qubit name
             qubit_name = qubit[i][0] + f"[{qubit[i][1]}]" if qubit[i][1] != -1 else qubit[i][0]
@@ -231,6 +290,11 @@ class Quantum_circuit:
             time_slice_node = Time_slice_node("reset")
             time_slice_node.time_slice_index = max_time_slice
             time_slice_node.reset = True
+            # Add the conditioned variables to the reset timeslice node
+            if if_flag:
+                time_slice_node.if_flag = True
+                time_slice_node.if_num = if_creg_num
+                time_slice_node.if_creg = if_creg_name
             # Add the new timeslice node to the circuit
             self.qubits[qubit_names[i]][f"timeslice_{max_time_slice}"] = time_slice_node
             # Set the maximum timeslice index for the circuit
@@ -278,68 +342,72 @@ class Quantum_circuit:
             operation_len = 1
             for qubit in self.qubits:
                 if f"timeslice_{i}" in self.qubits[qubit]:
+                    if_str = ""
+                    # Check if the current qubit is under the if condition
+                    if self.qubits[qubit][f"timeslice_{i}"].if_flag:
+                        if_str = f" |{self.qubits[qubit][f'timeslice_{i}'].if_creg}={self.qubits[qubit][f'timeslice_{i}'].if_num}"
                     if pos_idx == 0:
                         # Check for the reset operation
                         if self.qubits[qubit][f"timeslice_{i}"].reset:
-                            circuit_str += "reset"
-                            operation_len = 5
+                            circuit_str += "reset"+if_str
+                            operation_len = 5 + len(if_str)
                         # Check for the measurement operation
                         elif self.qubits[qubit][f"timeslice_{i}"].measurement:
                             creg = self.qubits[qubit][f"timeslice_{i}"].connected_cregs
                             creg_names = f"{', '.join(map(str, creg))}"
-                            circuit_str += "M -> "+creg_names
-                            operation_len = len(creg_names)+5
+                            circuit_str += "M -> "+creg_names + if_str
+                            operation_len = len(creg_names)+5+len(if_str)
                         # Check for the controlled operation
                         elif self.qubits[qubit][f"timeslice_{i}"].controlled_operation:
                             if self.qubits[qubit][f"timeslice_{i}"].target_qubit:
                                 gate_name = self.qubits[qubit][f"timeslice_{i}"].gate_operation
                                 parameter = self.qubits[qubit][f"timeslice_{i}"].parameters
                                 name = f"{gate_name}({', '.join(map(str, parameter))})" if self.qubits[qubit][f"timeslice_{i}"].with_parameter else gate_name
-                                circuit_str += name+" o"
-                                operation_len = len(name)+2
+                                circuit_str += name+" o"+if_str
+                                operation_len = len(name)+2+len(if_str)
                             else:
                                 gate_name = self.qubits[qubit][f"timeslice_{i}"].gate_operation
                                 parameter = self.qubits[qubit][f"timeslice_{i}"].parameters
                                 name = f"{gate_name}({', '.join(map(str, parameter))})" if self.qubits[qubit][f"timeslice_{i}"].with_parameter else gate_name
-                                circuit_str += name+" "+self.qubits[qubit][f"timeslice_{i}"].connected_qubits[0]
-                                operation_len = len(name)+len(self.qubits[qubit][f"timeslice_{i}"].connected_qubits[0])+1
+                                circuit_str += name+" "+self.qubits[qubit][f"timeslice_{i}"].connected_qubits[0]+if_str
+                                operation_len = len(name)+len(self.qubits[qubit][f"timeslice_{i}"].connected_qubits[0])+1+len(if_str)
                         else:
                             gate_name = self.qubits[qubit][f"timeslice_{i}"].gate_operation
                             parameter = self.qubits[qubit][f"timeslice_{i}"].parameters
                             name = f"{gate_name}({', '.join(map(str, parameter))})" if self.qubits[qubit][f"timeslice_{i}"].with_parameter else gate_name
-                            circuit_str += name
-                            operation_len = len(name)
+                            circuit_str += name+if_str
+                            operation_len = len(name)+len(if_str)
                     else:
                         # Check for the reset operation
                         if self.qubits[qubit][f"timeslice_{i}"].reset:
-                            circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + "reset"
-                            operation_len = 5
+                            circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + "reset"+if_str
+                            operation_len = 5+len(if_str)
                         # Check for the measurement operation
                         elif self.qubits[qubit][f"timeslice_{i}"].measurement:
                             creg = self.qubits[qubit][f"timeslice_{i}"].connected_cregs
                             creg_names = f"{', '.join(map(str, creg))}"
-                            circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + "M -> "+creg_names
-                            operation_len = len(creg_names)+5
+                            circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + "M -> "+creg_names+if_str
+                            operation_len = len(creg_names)+5+len(if_str)
                         # Check for the controlled operations
                         elif self.qubits[qubit][f"timeslice_{i}"].controlled_operation:
                             if self.qubits[qubit][f"timeslice_{i}"].target_qubit:
                                 gate_name = self.qubits[qubit][f"timeslice_{i}"].gate_operation
                                 parameter = self.qubits[qubit][f"timeslice_{i}"].parameters
                                 name = f"{gate_name}({', '.join(map(str, parameter))})" if self.qubits[qubit][f"timeslice_{i}"].with_parameter else gate_name
-                                circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len)+name+" o"
-                                operation_len = len(name)+2
+                                circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len)+name+" o"+if_str
+                                operation_len = len(name)+2+len(if_str)
                             else:
                                 gate_name = self.qubits[qubit][f"timeslice_{i}"].gate_operation
                                 parameter = self.qubits[qubit][f"timeslice_{i}"].parameters
                                 name = f"{gate_name}({', '.join(map(str, parameter))})" if self.qubits[qubit][f"timeslice_{i}"].with_parameter else gate_name
-                                circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len)+name+" "+self.qubits[qubit][f"timeslice_{i}"].connected_qubits[0]
-                                operation_len = len(name)+len(self.qubits[qubit][f"timeslice_{i}"].connected_qubits[0])+1
+                                circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len)+name+" "+self.qubits[qubit][f"timeslice_{i}"].connected_qubits[0]+if_str
+                                operation_len = len(name)+len(self.qubits[qubit][f"timeslice_{i}"].connected_qubits[0])+1+len(if_str)
                         else:
                             gate_name = self.qubits[qubit][f"timeslice_{i}"].gate_operation
                             parameter = self.qubits[qubit][f"timeslice_{i}"].parameters
                             name = f"{gate_name}({', '.join(map(str, parameter))})" if self.qubits[qubit][f"timeslice_{i}"].with_parameter else gate_name
-                            circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + name
-                            operation_len = len(name)
+                            circuit_str += " " *(qubit_pos[pos_idx]-qubit_pos[pos_idx-1]-operation_len) + name + if_str
+                            operation_len = len(name)+len(if_str)
                 else:
                     if pos_idx == 0:
                         circuit_str += " "

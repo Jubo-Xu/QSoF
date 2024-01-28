@@ -22,6 +22,17 @@ gate check_with_param (param1, param2, param3, param4) a, b{
     RZ(param1+param2) b;
 }
 
+gate check1(param1, param2) a, b{
+    RX(param1) a;
+    RY(param2) b;
+}
+
+gate check2(param1, param2, param3) a, b, c{
+    RY(param1+param2*param3) c;
+    check1(param1, param2) a, b;
+    RZ(param3) c;
+}
+
 
 // gate declare
 X q[0];
@@ -42,8 +53,8 @@ CX q[1], q[0];
 CX q[1], q[3];
 CX q_0, q[2];
 CRX(1) q_0, q[3];
-check_no_param q[3], q[2];
-check_with_param(2.5, 1.5, 3.5, 4) q[1], q[2];
+//check_no_param q[3], q[2];
+//check_with_param(2.5, 1.5, 3.5, 4) q[1], q[2];
 RX (sqrt(4)) q[3];
 RY (1+2) q_0; // 3
 RY (2*2+1) q_0; // 5
@@ -64,3 +75,4 @@ barrier q[1];
 barrier q;
 X q[2];
 barrier q, q_0, q1;
+check2(1, 2, 3) q[0], q[1], q[2];
