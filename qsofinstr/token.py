@@ -1,4 +1,6 @@
 import sys
+from pathlib import Path
+
 
 TK_OPERATOR = 0
 TK_NUM = 1
@@ -42,12 +44,26 @@ TK_LN = 38
 TK_SQRT = 39
 TK_EXP = 40
 
+# The class for the filesystem
+class Filesystem:
+    def __init__(self, filename):
+        self.name = filename
+        self.file_str = "" # The string of the file
+        self.token = None # The token list of the file
+        self.token_idx = 0 # The index of the current token list
+        self.PARSE_FINISH = False # The flag to indicate whether the parsing is finished
+        self.include_dict = None # The dictionary for the include files of current file
+    
+    def Tokenize(self):
+        self.file_str, self.token, self.include_dict = Token.tokenize(self.name)
+
 class Token(object):
     def __init__(self):
         self.qasm_str = ""
         # The element is a tuple with the structure (kind, val, exp, len, str)
         # The value is represented as scientific notation, therefore needs val and exp parts
-        self.Token = []       
+        self.Token = []    
+        self.name = ""   
         self.line_count = 1
         self.err_line_idx = 0
         self.kind_idx = 0
@@ -58,6 +74,10 @@ class Token(object):
         self.line_count_idx = 5
         self.err_line_idx_idx = 6
         self.idx_idx = 7
+        # The dictionary for the included files
+        self.include_dict = {}
+        # The list of the files
+        self.file_list = []
         
     def file2str(self, filename):
         with open(filename, 'r') as file:
@@ -73,6 +93,9 @@ class Token(object):
     def Tokenize(filename):
         TK = Token()
         TK.file2str(filename)
+        TK.name = filename
+        TK.include_dict[filename] = Filesystem(filename)
+        TK.file_list.append(filename)
         i = 0
         while i < len(TK.qasm_str):
             # Skip whitespace
@@ -89,7 +112,41 @@ class Token(object):
                     while TK.qasm_str[i] != "\n":
                         i += 1
                     continue
-
+            
+            # Check for include files
+            if TK.qasm_str[i]=="i"and TK.qasm_str[i+1]=="n"and TK.qasm_str[i+2]=="c"and TK.qasm_str[i+3]=="l"and TK.qasm_str[i+4]=="u"and TK.qasm_str[i+5]=="d"and TK.qasm_str[i+6]=="e":
+                if TK.qasm_str[i+7].isspace() or TK.qasm_str[i+7]=="\"":
+                    i += 7
+                    # Skip whitespaces
+                    while (i < len(TK.qasm_str)) and (TK.qasm_str[i].isspace()):
+                        i += 1
+                    # Check for "
+                    if TK.qasm_str[i] != "\"":
+                        TK.annotate_error(TK.name, TK.qasm_str, i, "Expect \"", TK.line_count, TK.err_line_idx)
+                    i += 1
+                    # Get the filename
+                    filename = ""
+                    file_i = i
+                    while (i < len(TK.qasm_str)) and (TK.qasm_str[i] != "\""):
+                        filename += TK.qasm_str[i]
+                        i += 1
+                    # Check whether the file exists
+                    file_path = Path(filename)
+                    if not file_path.exists():
+                        TK.annotate_error(TK.name, TK.qasm_str, file_i, "File not found", TK.line_count, TK.err_line_idx)
+                    i += 1
+                    # Skip whitespaces
+                    while (i < len(TK.qasm_str)) and (TK.qasm_str[i].isspace()):
+                        i += 1
+                    # Check for ;
+                    if TK.qasm_str[i] != ";":
+                        TK.annotate_error(TK.name, TK.qasm_str, i, "Expect ;", TK.line_count, TK.err_line_idx)
+                    i += 1
+                    # Add the filename to the include dictionary
+                    TK.include_dict[filename] = Filesystem(filename)
+                    TK.file_list.append(filename)
+                    continue
+                    
             # Check for ;
             if TK.qasm_str[i] == ";":
                 TK.Token.append((TK_OPERATOR, 0, 0, 1, ";", TK.line_count, TK.err_line_idx, i))
@@ -476,21 +533,21 @@ class Token(object):
                             exp = 10*exp + int(TK.qasm_str[i])
                             i += 1
                     else:
-                        TK.annotate_error(TK.qasm_str, i, "Invalid number", TK.line_count, TK.err_line_idx)
+                        TK.annotate_error(TK.name, TK.qasm_str, i, "Invalid number", TK.line_count, TK.err_line_idx)
                 TK.Token.append((TK_NUM, float(num), float(exp), i-i_init, TK.qasm_str[i_init:i], TK.line_count, TK.err_line_idx, i_init))
                 continue
             
             # raise Exception("Invalid character, cannot Tokenize!")
-            TK.annotate_error(TK.qasm_str, i, "Invalid character, cannot Tokenize!", TK.line_count, TK.err_line_idx)
+            TK.annotate_error(TK.name, TK.qasm_str, i, "Invalid character, cannot Tokenize!", TK.line_count, TK.err_line_idx)
         TK.Token.append((TK_EOF, 0, 0, 0, "EOF", TK.line_count, TK.err_line_idx, i))
-        return TK.qasm_str, TK.Token
+        return TK.qasm_str, TK.Token, TK.include_dict
     
     @staticmethod
     def make_string_red(input_string):
         return "\033[91m" + input_string + "\033[0m"
 
     @staticmethod
-    def annotate_error(input_string, error_index, error_message, line_idx, line_start):
+    def annotate_error(string_name, input_string, error_index, error_message, line_idx, line_start):
         # Check if the index is within the bounds of the string
         if error_index < 0 or error_index > len(input_string):
             raise ValueError("Error index out of bounds")
@@ -500,7 +557,7 @@ class Token(object):
             line_end += 1
         # Prepare the error annotation
         # string_init = f"[line: "{line_idx}"] "
-        string_init = f"[line: \"{line_idx}\"] "
+        string_init = f"[file: {string_name}] "+f"[line: \"{line_idx}\"] "
         input_line = string_init + input_string[line_start:error_index+line_end]
         hat_line = " "*(len(string_init)+error_index-line_start) + Token.make_string_red("^")
         err_line = " "*(len(string_init)+error_index-line_start) + Token.make_string_red(error_message+"!")

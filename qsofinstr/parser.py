@@ -153,7 +153,7 @@ class Explist(Node):
 
 
 class Parser(Token):
-    def __init__(self, TK, file_str):
+    def __init__(self, TK, file_str, include_dic):
         super().__init__()
         self.token = TK
         self.node = None
@@ -187,6 +187,8 @@ class Parser(Token):
         self.GATE_name = ""
         # This variable is used for the gate definition
         self.GATE_DEF_name = ""
+        # The dictionary for the include files
+        self.include_dict = include_dic
         
         
     @staticmethod
@@ -244,7 +246,7 @@ class Parser(Token):
         return self.token[idx][self.kind_idx] == token.TK_OPERATOR and self.token[idx][self.str_idx] == str
     
     def error_at(self, idx, message):
-        Token.annotate_error(self.input_str, self.token[idx][self.idx_idx], message, self.token[idx][self.line_count_idx], self.token[idx][self.err_line_idx_idx])
+        Token.annotate_error("", self.input_str, self.token[idx][self.idx_idx], message, self.token[idx][self.line_count_idx], self.token[idx][self.err_line_idx_idx])
     
     def check_num_error(self, name):
         # Check whether the qreg or creg size is missing or wrong type is used
@@ -511,13 +513,15 @@ class Parser(Token):
                 self.error_at(self.token_idx, "The gate name and the arguments are missing")
             else:
                 self.error_at(self.token_idx, "The gate name cannot be this type")
+                return
         if self.check_TK_kind(self.token_idx) == token.TK_IDENT and self.check_operator_str(self.token_idx+1, ","):
             self.error_at(self.token_idx, "The gate name is missing")
         # Check whether the gate is already defined 
         if self.token[self.token_idx][self.str_idx] in self.gates:
             self.error_at(self.token_idx, "gate "+self.token[self.token_idx][self.str_idx]+" already defined")
-        name = self.token[self.token_idx][self.str_idx]
+        name = self.token[self.token_idx][self.str_idx] 
         # Set the current gate name
+        GATE_DEF_name_pre = self.GATE_DEF_name
         self.GATE_DEF_name = name
         self.token_idx += 1
         params = []
@@ -544,13 +548,15 @@ class Parser(Token):
         gate_val.add_args(args)
         self.gates[name] = gate_val # Add the node to the dictionary here because the error check inside the contents need to use the parameters and arguments
         # Set the gate_define flag to true to indicate that the current state is a gate definition
+        GATE_define_pre = self.GATE_define
         self.GATE_define = True
         self.expect("{")
         while not self.check_operator_str(self.token_idx, "}"):
             self.gates[name].add_contents(self.uop())
         self.expect("}")
-        # flip the gate_define flag to change the current state back to normal
-        self.GATE_define = False
+        # recover the gate_define flag and gate_def name to come back to the previous state
+        self.GATE_define = GATE_define_pre
+        self.GATE_DEF_name = GATE_DEF_name_pre
         node_gatedecl = Parser.create_node(ND_GATE_DEC)
         node_gatedecl.add_str(name)
         return node_gatedecl
@@ -1595,27 +1601,30 @@ class Parser(Token):
                 return lhs, rhs
         
         
-        
-    # Define the function to generate the quantum circuit
+    ### Define the function to generate the quantum circuit
     def circuit_gen(self):
         quantumcircuit = Quantum_circuit()
         for i in range(len(self.code)):
             self.code_gen(self.code[i], quantumcircuit)
         return quantumcircuit
     
-        
-    
-    
-    
-    
-    
-    
+    #================================================================================================
+    # Compilation
+    #================================================================================================
+    @staticmethod
+    def compile(filepath):
+        str, TK, include_dic = Token.Tokenize(filepath)
+        parser = Parser(TK, str, include_dic)
+        parser.Recursive_Descent_Parsing()
+        QC = parser.circuit_gen()
+        return QC
     
 filepath = "qsofinstr/check.qasm"
-str, TK = Token.Tokenize(filepath)
-parser = Parser(TK, str)
-parser.Recursive_Descent_Parsing()
-QC = parser.circuit_gen()
+# str, TK = Token.Tokenize(filepath)
+# parser = Parser(TK, str)
+# parser.Recursive_Descent_Parsing()
+# QC = parser.circuit_gen()
+QC = Parser.compile(filepath)
 QC.test_draw()    
     
     

@@ -1,3 +1,4 @@
+//include "check2.inc";
 // qreg declare
 qreg q[4];
 qreg q_0[1];
