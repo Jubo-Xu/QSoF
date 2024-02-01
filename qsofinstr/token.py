@@ -44,18 +44,6 @@ TK_LN = 38
 TK_SQRT = 39
 TK_EXP = 40
 
-# The class for the filesystem
-class Filesystem:
-    def __init__(self, filename):
-        self.name = filename
-        self.file_str = "" # The string of the file
-        self.token = None # The token list of the file
-        self.token_idx = 0 # The index of the current token list
-        self.PARSE_FINISH = False # The flag to indicate whether the parsing is finished
-        self.include_dict = None # The dictionary for the include files of current file
-    
-    def Tokenize(self):
-        self.file_str, self.token, self.include_dict = Token.tokenize(self.name)
 
 class Token(object):
     def __init__(self):
@@ -74,10 +62,8 @@ class Token(object):
         self.line_count_idx = 5
         self.err_line_idx_idx = 6
         self.idx_idx = 7
-        # The dictionary for the included files
-        self.include_dict = {}
         # The list of the files
-        self.file_list = []
+        self.include_file_list = []
         
     def file2str(self, filename):
         with open(filename, 'r') as file:
@@ -94,8 +80,6 @@ class Token(object):
         TK = Token()
         TK.file2str(filename)
         TK.name = filename
-        TK.include_dict[filename] = Filesystem(filename)
-        TK.file_list.append(filename)
         i = 0
         while i < len(TK.qasm_str):
             # Skip whitespace
@@ -109,7 +93,7 @@ class Token(object):
             if TK.qasm_str[i] == "/":
                 if TK.qasm_str[i+1] == "/":
                     i += 2
-                    while TK.qasm_str[i] != "\n":
+                    while (i < len(TK.qasm_str)) and TK.qasm_str[i] != "\n":
                         i += 1
                     continue
             
@@ -142,9 +126,8 @@ class Token(object):
                     if TK.qasm_str[i] != ";":
                         TK.annotate_error(TK.name, TK.qasm_str, i, "Expect ;", TK.line_count, TK.err_line_idx)
                     i += 1
-                    # Add the filename to the include dictionary
-                    TK.include_dict[filename] = Filesystem(filename)
-                    TK.file_list.append(filename)
+                    # Add the file to the list
+                    TK.include_file_list.append(filename)
                     continue
                     
             # Check for ;
@@ -540,7 +523,7 @@ class Token(object):
             # raise Exception("Invalid character, cannot Tokenize!")
             TK.annotate_error(TK.name, TK.qasm_str, i, "Invalid character, cannot Tokenize!", TK.line_count, TK.err_line_idx)
         TK.Token.append((TK_EOF, 0, 0, 0, "EOF", TK.line_count, TK.err_line_idx, i))
-        return TK.qasm_str, TK.Token, TK.include_dict
+        return TK.name, TK.qasm_str, TK.Token, TK.include_file_list
     
     @staticmethod
     def make_string_red(input_string):

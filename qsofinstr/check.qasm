@@ -1,4 +1,4 @@
-//include "check2.inc";
+include "qsofinstr/test1.qasm";
 // qreg declare
 qreg q[4];
 qreg q_0[1];
@@ -78,3 +78,6 @@ check2(1, 2, 3) q[0], q[1], q[2];
 if (c[0] == 1) X q[0];
 if (c[1] == 1) CX q[0], q[1];
 if (c[2] == 1) check2(1, 2, 3) q[2], q[3], q_0;
+include_test1(1.5, 2.5) q1[0], q1[1];
+skip q1[0];
+check3 q1[1];

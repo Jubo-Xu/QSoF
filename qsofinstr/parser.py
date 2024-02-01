@@ -4,6 +4,7 @@ from quantumcircuit import Quantum_circuit
 from quantumcircuit import Time_slice_node
 import quantumcircuit
 import math
+from collections import deque
 
 # Define the node kinds
 ND_NUM = 0
@@ -114,6 +115,7 @@ class Gate:
         self.params = None
         self.args = None
         self.contents = []
+        self.filename = ""
     
     def add_params(self, param):
         # The parameters of Gate declaration is a dictionary, which is used for two things: 
@@ -138,6 +140,9 @@ class Gate:
     
     def add_contents(self, content_node):
         self.contents.append(content_node)
+    
+    def add_filename(self, filename):
+        self.filename = filename
 
 # The expressions would be represented as a list, where each element is a binary operation node
 class Explist(Node):
@@ -152,13 +157,27 @@ class Explist(Node):
             self.exps.append(exp)
 
 
+# The class for the filesystem
+class Filesystem:
+    def __init__(self, filename, input_str, TK):
+        self.name = filename
+        self.file_str = input_str # The string of the file
+        self.token = TK # The token list of the file
+        self.token_idx = 0 # The index of the current token list
+        self.PARSE_FINISH = False # The flag to indicate whether the parsing is finished
+        self.include_dict = None # The dictionary for the include files of current file
+    
+    def set_include_dict(self, dic):
+        self.include_dict = {file: None for file in dic}
+
+
 class Parser(Token):
-    def __init__(self, TK, file_str, include_dic):
+    def __init__(self, filenode):
         super().__init__()
-        self.token = TK
-        self.node = None
-        self.token_idx = 0
-        self.input_str = file_str
+        # self.token = TK
+        # self.node = None
+        # self.token_idx = 0
+        # self.input_str = file_str
         # Set up the Hash table for opaques, qregs, and cregs
         # For opaques, the key is the name of the opaque, and the element is a tuple of 
         self.opaques = {}
@@ -187,8 +206,13 @@ class Parser(Token):
         self.GATE_name = ""
         # This variable is used for the gate definition
         self.GATE_DEF_name = ""
-        # The dictionary for the include files
-        self.include_dict = include_dic
+        # This variable is used for the supported gate 
+        self.GATE_name_support = ""
+        # The current file node for parsing
+        self.current_file = filenode
+        self.gate_name_find = "" # The gate name that needs to be found
+        self.file_need_find = filenode
+        self.GATE_FOUND = True # The flag to indicate whether the gate is found
         
         
     @staticmethod
@@ -229,35 +253,103 @@ class Parser(Token):
         return node
     
     def expect(self, op):
-        if self.token[self.token_idx][self.kind_idx] != token.TK_OPERATOR or self.token[self.token_idx][self.str_idx] != op:
-            Token.annotate_error(self.input_str, self.token[self.token_idx][self.idx_idx], "missing operator: " + op, self.token[self.token_idx][self.line_count_idx], self.token[self.token_idx][self.err_line_idx_idx])
-        self.token_idx += 1
-    
+        # if self.token[self.token_idx][self.kind_idx] != token.TK_OPERATOR or self.token[self.token_idx][self.str_idx] != op:
+        #     Token.annotate_error(self.input_str, self.token[self.token_idx][self.idx_idx], "missing operator: " + op, self.token[self.token_idx][self.line_count_idx], self.token[self.token_idx][self.err_line_idx_idx])
+        # self.token_idx += 1
+        if self.current_file.token[self.current_file.token_idx][self.kind_idx] != token.TK_OPERATOR or self.current_file.token[self.current_file.token_idx][self.str_idx] != op:
+            Token.annotate_error(self.current_file.name, self.current_file.file_str, self.current_file.token[self.current_file.token_idx][self.idx_idx], "missing operator: "\
+                + op, self.current_file.token[self.current_file.token_idx][self.line_count_idx], self.current_file.token[self.current_file.token_idx][self.err_line_idx_idx])
+        self.current_file.token_idx += 1
+        
     def consume_operator_str(self, op):
-        if self.token[self.token_idx][self.kind_idx] != token.TK_OPERATOR or self.token[self.token_idx][self.str_idx] != op:
+        # if self.token[self.token_idx][self.kind_idx] != token.TK_OPERATOR or self.token[self.token_idx][self.str_idx] != op:
+        #     return False
+        # self.token_idx += 1
+        # return True
+        if self.current_file.token[self.current_file.token_idx][self.kind_idx] != token.TK_OPERATOR or self.current_file.token[self.current_file.token_idx][self.str_idx] != op:
             return False
-        self.token_idx += 1
+        self.current_file.token_idx += 1
         return True
     
     def check_TK_kind(self, idx):
-        return self.token[idx][self.kind_idx]
+        # return self.token[idx][self.kind_idx]
+        return self.current_file.token[idx][self.kind_idx]
 
     def check_operator_str(self, idx, str):
-        return self.token[idx][self.kind_idx] == token.TK_OPERATOR and self.token[idx][self.str_idx] == str
+        # return self.token[idx][self.kind_idx] == token.TK_OPERATOR and self.token[idx][self.str_idx] == str
+        return self.current_file.token[idx][self.kind_idx] == token.TK_OPERATOR and self.current_file.token[idx][self.str_idx] == str
     
     def error_at(self, idx, message):
-        Token.annotate_error("", self.input_str, self.token[idx][self.idx_idx], message, self.token[idx][self.line_count_idx], self.token[idx][self.err_line_idx_idx])
+        # Token.annotate_error("", self.input_str, self.token[idx][self.idx_idx], message, self.token[idx][self.line_count_idx], self.token[idx][self.err_line_idx_idx])
+        Token.annotate_error(self.current_file.name, self.current_file.file_str, self.current_file.token[idx][self.idx_idx], message, self.current_file.token[idx][self.line_count_idx], self.current_file.token[idx][self.err_line_idx_idx])
     
     def check_num_error(self, name):
         # Check whether the qreg or creg size is missing or wrong type is used
-        if self.check_TK_kind(self.token_idx) != token.TK_NUM:
-            if self.check_operator_str(self.token_idx, "]"):
-                self.error_at(self.token_idx, "There has to be a number for the "+name)
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_NUM:
+            if self.check_operator_str(self.current_file.token_idx, "]"):
+                self.error_at(self.current_file.token_idx, "There has to be a number for the "+name)
             else:
-                self.error_at(self.token_idx, "The "+name+" should be a number")
+                self.error_at(self.current_file.token_idx, "The "+name+" should be a number")
         # Check whether the qreg or creg size is an integer
-        if self.token[self.token_idx][self.val_idx] != int(self.token[self.token_idx][self.val_idx]) or self.token[self.token_idx][self.exp_idx] != 0:
-            self.error_at(self.token_idx, "The "+name+" should be an integer")
+        if self.current_file.token[self.current_file.token_idx][self.val_idx] != int(self.current_file.token[self.current_file.token_idx][self.val_idx]) or self.current_file.token[self.current_file.token_idx][self.exp_idx] != 0:
+            self.error_at(self.current_file.token_idx, "The "+name+" should be an integer")
+    
+    def get_next_token(self, i=1):
+        self.current_file.token_idx += i
+    
+    # Define the function for checking the included files if the gate declared is not defined in current file
+    def check_include_files_current(self, filenode):
+        # filenode_ref_parent = filenode
+        # should iterate through all the child files layer by layer
+        for file in filenode.include_dict:
+            # if the file is not tokenized, first tokenize it
+            if filenode.include_dict[file] is None:
+                filename, file_str, TK, include_dic = Token.Tokenize(file)
+                file_node = Filesystem(filename, file_str, TK)
+                file_node.set_include_dict(include_dic)
+                filenode.include_dict[file] = file_node
+            # if the file is already completely parsed, then skip it
+            if filenode.include_dict[file].token[filenode.include_dict[file].token_idx][self.kind_idx] == token.TK_EOF:
+                print("The file "+filenode.include_dict[file].name+" is already parsed")
+                continue
+            print("Parsing the file "+filenode.include_dict[file].name)
+            # parsing the file and if the gate definition is found, the while loop will be terminated
+            # set the current filenode of the parser to this file
+            self.current_file = filenode.include_dict[file]
+            print("current file is"+self.current_file.name)
+            while (not self.GATE_FOUND) and (filenode.include_dict[file].token[filenode.include_dict[file].token_idx][self.kind_idx] != token.TK_EOF):
+                self.statement()
+            # reference back to the parent file
+            # self.current_file = filenode_ref_parent
+            # if the gate is found, then return True
+            if self.GATE_FOUND:
+                return True
+        # if all the included files of current file are checked and the gate is not found, then return False
+        return False
+    
+    # The basic logic of searching the gate is to first check whether the gate is defined in the included files of current file,
+    # if not, then check whether the gate is defined in the included files of the included files of current file, and so on. So it's
+    # a recursive checking of the tree-structured filesystem layer by layer, that's because normally the gate used is defined in the 
+    # included files of the current file, so it's more efficient to check the included files of current file first. Based on this logic,
+    # Breadth-first search(BFS) algorithm is used here.
+    def check_included_files(self, filenode):
+        # starting from the current file
+        queue_file = deque([filenode])
+        
+        while queue_file:
+            # pop the first element in the queue
+            current_filenode = queue_file.popleft()
+            # visiting the current file
+            # if the gate is found, then directly return True
+            if self.check_include_files_current(current_filenode):
+                return True
+            # add the included files of current file to the queue
+            for file in current_filenode.include_dict:
+                queue_file.append(current_filenode.include_dict[file])
+        # if all the files are checked and the gate is not found, then return False
+        return False
+        
+            
     
     ### Recursive descent parsing ###
     ''' BNF of modified OpenQASM
@@ -337,24 +429,24 @@ class Parser(Token):
     
     # Recursive descent parsing of program
     def program(self):
-        while self.token[self.token_idx][self.kind_idx] != token.TK_EOF:
+        while self.current_file.token[self.current_file.token_idx][self.kind_idx] != token.TK_EOF:
             self.code.append(self.statement())
 
     # Recursive descent parsing of statement
     def statement(self):
-        if self.check_TK_kind(self.token_idx) == token.TK_QREG or self.check_TK_kind(self.token_idx) == token.TK_CREG:
+        if self.check_TK_kind(self.current_file.token_idx) == token.TK_QREG or self.check_TK_kind(self.current_file.token_idx) == token.TK_CREG:
             return self.decl()
-        elif self.check_TK_kind(self.token_idx) == token.TK_GATE:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_GATE:
             return self.gatedecl()
-        elif self.check_TK_kind(self.token_idx) == token.TK_OPAQUE:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_OPAQUE:
             # Check whether the opaque is already defined
-            if self.token[self.token_idx+1][self.str_idx] in self.opaques:
-                self.error_at(self.token_idx+1, "opaque "+self.token[self.token_idx+1][self.str_idx]+" already defined")
-            if self.check_operator_str(self.token_idx+2, "("):
+            if self.current_file.token[self.current_file.token_idx+1][self.str_idx] in self.opaques:
+                self.error_at(self.current_file.token_idx+1, "opaque "+self.current_file.token[self.current_file.token_idx+1][self.str_idx]+" already defined")
+            if self.check_operator_str(self.current_file.token_idx+2, "("):
                 # Recursive descent parsing for 'opaque id (idlist) idlist ;'
-                if self.check_TK_kind(self.token_idx+3) == token.TK_IDENT:
-                    name = self.token[self.token_idx+1][self.str_idx]
-                    self.token_idx += 3
+                if self.check_TK_kind(self.current_file.token_idx+3) == token.TK_IDENT:
+                    name = self.current_file.token[self.current_file.token_idx+1][self.str_idx]
+                    self.get_next_token(3)
                     opaque_instance = Opaque(name)
                     params = self.idlist_param()
                     opaque_instance.add_params(params)
@@ -367,9 +459,9 @@ class Parser(Token):
                     node_stmt.add_str(name)
                     return node_stmt
                 # Recursive descent parsing for 'opaque id () idlist ;'
-                elif self.check_operator_str(self.token_idx+3, ")"):
-                    name = self.token[self.token_idx+1][self.str_idx]
-                    self.token_idx += 4
+                elif self.check_operator_str(self.current_file.token_idx+3, ")"):
+                    name = self.current_file.token[self.current_file.token_idx+1][self.str_idx]
+                    self.get_next_token(4)
                     opaque_instance = Opaque(name)
                     args = self.idlist_qubit().qregs
                     opaque_instance.add_args(args)
@@ -379,11 +471,11 @@ class Parser(Token):
                     node_stmt.add_str(name)
                     return node_stmt
                 else:
-                    self.error_at(self.token_idx+3, "The parameters could only be identifiers or empty")
+                    self.error_at(self.current_file.token_idx+3, "The parameters could only be identifiers or empty")
             # Recursive descent parsing for 'opaque id idlist ;'
-            elif self.check_TK_kind(self.token_idx+2) == token.TK_IDENT:
-                name = self.token[self.token_idx+1][self.str_idx]
-                self.token_idx += 3
+            elif self.check_TK_kind(self.current_file.token_idx+2) == token.TK_IDENT:
+                name = self.current_file.token[self.current_file.token_idx+1][self.str_idx]
+                self.get_next_token(3)
                 opaque_instance = Opaque(name)
                 args = self.idlist_qubit().qregs
                 opaque_instance.add_args(args)
@@ -394,26 +486,26 @@ class Parser(Token):
                 return node_stmt
             # Check for some errors
             else:
-                if self.check_operator_str(self.token_idx+2, ";"):
-                    self.error_at(self.token_idx+2, "The arguments cannot be empty")
-                elif self.check_operator_str(self.token_idx+2, ","):
-                    self.error_at(self.token_idx+2, "The opaque name cannot be empty")
+                if self.check_operator_str(self.current_file.token_idx+2, ";"):
+                    self.error_at(self.current_file.token_idx+2, "The arguments cannot be empty")
+                elif self.check_operator_str(self.current_file.token_idx+2, ","):
+                    self.error_at(self.current_file.token_idx+2, "The opaque name cannot be empty")
                 else:
-                    self.error_at(self.token_idx+2, "The arguments or parameters cannot be this type")
+                    self.error_at(self.current_file.token_idx+2, "The arguments or parameters cannot be this type")
         # Recursive descent parsing for 'if (condition) qop'
-        elif self.check_TK_kind(self.token_idx) == token.TK_IF:
-            self.token_idx += 1
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IF:
+            self.get_next_token()
             self.expect("(")
             condition = self.condition()
             self.expect(")")
-            if self.check_operator_str(self.token_idx, ";"):
-                self.error_at(self.token_idx, "The statement of if cannot be empty")
+            if self.check_operator_str(self.current_file.token_idx, ";"):
+                self.error_at(self.current_file.token_idx, "The statement of if cannot be empty")
             qop = self.qop()
             node_stmt = Parser.create_node(ND_IF, condition, qop)
             return node_stmt
         # Recursive descent parsing for 'barrier idlist ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_BARRIER:
-            self.token_idx += 1
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_BARRIER:
+            self.get_next_token()
             args = self.idlist_qubit()
             self.expect(";")
             return Parser.create_node(ND_BARRIER, args)
@@ -423,68 +515,68 @@ class Parser(Token):
     
     # Recursive descent parsing for 'condition := id == nninteger'
     def condition(self):
-        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-            if self.check_operator_str(self.token_idx, ")"):
-                self.error_at(self.token_idx, "The condition cannot be empty")
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            if self.check_operator_str(self.current_file.token_idx, ")"):
+                self.error_at(self.current_file.token_idx, "The condition cannot be empty")
             else:
-                self.error_at(self.token_idx, "The condition cannot be this type")
+                self.error_at(self.current_file.token_idx, "The condition cannot be this type")
         # condition_lhs = self.create_node_creg((self.token[self.token_idx][self.str_idx], -1))
         condition_lhs = self.argument_c()
         # Check whether the size of the creg is 1 if it's not indexed
         if condition_lhs.cregs[0][1] == -1:
             if self.cregs[condition_lhs.cregs[0][0]] != 1:
-                self.error_at(self.token_idx, "The condition should be a single bit")
+                self.error_at(self.current_file.token_idx, "The condition should be a single bit")
         self.expect("==")
-        condition_rhs = self.create_node_num(self.token[self.token_idx][self.val_idx])
-        self.token_idx += 1
+        condition_rhs = self.create_node_num(self.current_file.token[self.current_file.token_idx][self.val_idx])
+        self.get_next_token()
         node_condition = Parser.create_node(ND_EQUAL, condition_lhs, condition_rhs)
         return node_condition
     
     # Recursive descent parsing for 'decl := qreg id [nninteger] ; | creg id [nninteger] ;'
     def decl(self):
         # Recursive descent parsing for 'qreg id [nninteger] ;'
-        if self.check_TK_kind(self.token_idx) == token.TK_QREG:
-            self.token_idx += 1
+        if self.check_TK_kind(self.current_file.token_idx) == token.TK_QREG:
+            self.get_next_token()
             # Check whether the qreg name is missing or wrong type is used
-            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-                if self.check_operator_str(self.token_idx, "["):
-                    self.error_at(self.token_idx, "The qreg name is missing")
+            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.current_file.token_idx, "["):
+                    self.error_at(self.current_file.token_idx, "The qreg name is missing")
                 else:
-                    self.error_at(self.token_idx, "The qreg name cannot be this type")
+                    self.error_at(self.current_file.token_idx, "The qreg name cannot be this type")
             # Check whether the qreg name is already defined
-            if self.token[self.token_idx][self.str_idx] in self.qregs:
-                self.error_at(self.token_idx, "qreg "+self.token[self.token_idx][self.str_idx]+" already defined")
-            name = self.token[self.token_idx][self.str_idx]
-            self.token_idx += 1
+            if self.current_file.token[self.current_file.token_idx][self.str_idx] in self.qregs:
+                self.error_at(self.current_file.token_idx, "qreg "+self.current_file.token[self.current_file.token_idx][self.str_idx]+" already defined")
+            name = self.current_file.token[self.current_file.token_idx][self.str_idx]
+            self.get_next_token()
             self.expect("[")
             self.check_num_error("qreg size")
-            size = int(self.token[self.token_idx][self.val_idx])
+            size = int(self.current_file.token[self.current_file.token_idx][self.val_idx])
             self.qregs[name] = size
-            self.token_idx += 1
+            self.get_next_token()
             self.expect("]")
             self.expect(";")
             node_decl = Parser.create_node(ND_QREG_DEC)
             node_decl.add_str(name)
             return node_decl
         # Recursive descent parsing for 'creg id [nninteger] ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CREG:
-            self.token_idx += 1
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CREG:
+            self.get_next_token()
             # Check whether the creg name is missing or wrong type is used
-            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-                if self.check_operator_str(self.token_idx, "["):
-                    self.error_at(self.token_idx, "The creg name is missing")
+            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.current_file.token_idx, "["):
+                    self.error_at(self.current_file.token_idx, "The creg name is missing")
                 else:
-                    self.error_at(self.token_idx, "The creg name cannot be this type")
+                    self.error_at(self.current_file.token_idx, "The creg name cannot be this type")
             # Check whether the creg name is already defined
-            if self.token[self.token_idx][self.str_idx] in self.cregs:
-                self.error_at(self.token_idx, "creg "+self.token[self.token_idx][self.str_idx]+" already defined")
-            name = self.token[self.token_idx][self.str_idx]
-            self.token_idx += 1
+            if self.current_file.token[self.current_file.token_idx][self.str_idx] in self.cregs:
+                self.error_at(self.current_file.token_idx, "creg "+self.current_file.token[self.current_file.token_idx][self.str_idx]+" already defined")
+            name = self.current_file.token[self.current_file.token_idx][self.str_idx]
+            self.get_next_token()
             self.expect("[")
             self.check_num_error("creg size")
-            size = int(self.token[self.token_idx][self.val_idx])
+            size = int(self.current_file.token[self.current_file.token_idx][self.val_idx])
             self.cregs[name] = size
-            self.token_idx += 1
+            self.get_next_token()
             self.expect("]")
             self.expect(";")
             node_decl = Parser.create_node(ND_CREG_DEC)
@@ -492,66 +584,69 @@ class Parser(Token):
             return node_decl
         # Check for some errors
         else:
-            if self.check_operator_str(self.token_idx, ";"):
-                self.error_at(self.token_idx, "The declaration cannot be empty")
-            elif self.check_operator_str(self.token_idx, "["):
-                self.error_at(self.token_idx, "The qreg name cannot be empty")
+            if self.check_operator_str(self.current_file.token_idx, ";"):
+                self.error_at(self.current_file.token_idx, "The declaration cannot be empty")
+            elif self.check_operator_str(self.current_file.token_idx, "["):
+                self.error_at(self.current_file.token_idx, "The qreg name cannot be empty")
             else:
-                self.error_at(self.token_idx, "The declaration cannot be this type")
+                self.error_at(self.current_file.token_idx, "The declaration cannot be this type")
     
     # Recursive descent parsing for 'gatedecl := gate id idlist {goplist}|gate id () idlist {goplist}|gate id (idlist) idlist {goplist}'
     def gatedecl(self):
         # Check whether the gate keyword is missing
-        if self.check_TK_kind(self.token_idx) != token.TK_GATE:
-            self.error_at(self.token_idx, "The gate keyword is missing")
-        self.token_idx += 1
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_GATE:
+            self.error_at(self.current_file.token_idx, "The gate keyword is missing")
+        self.get_next_token()
         # Check whether the gate name is missing or wrong type is used 
-        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-            if self.check_operator_str(self.token_idx, "("):
-                self.error_at(self.token_idx, "The gate name is missing")
-            elif self.check_operator_str(self.token_idx, "{") or self.check_operator_str(self.token_idx, ";"):
-                self.error_at(self.token_idx, "The gate name and the arguments are missing")
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            if self.check_operator_str(self.current_file.token_idx, "("):
+                self.error_at(self.current_file.token_idx, "The gate name is missing")
+            elif self.check_operator_str(self.current_file.token_idx, "{") or self.check_operator_str(self.current_file.token_idx, ";"):
+                self.error_at(self.current_file.token_idx, "The gate name and the arguments are missing")
             else:
-                self.error_at(self.token_idx, "The gate name cannot be this type")
+                self.error_at(self.current_file.token_idx, "The gate name cannot be this type")
                 return
-        if self.check_TK_kind(self.token_idx) == token.TK_IDENT and self.check_operator_str(self.token_idx+1, ","):
-            self.error_at(self.token_idx, "The gate name is missing")
+        if self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT and self.check_operator_str(self.current_file.token_idx+1, ","):
+            self.error_at(self.current_file.token_idx, "The gate name is missing")
         # Check whether the gate is already defined 
-        if self.token[self.token_idx][self.str_idx] in self.gates:
-            self.error_at(self.token_idx, "gate "+self.token[self.token_idx][self.str_idx]+" already defined")
-        name = self.token[self.token_idx][self.str_idx] 
+        if self.current_file.token[self.current_file.token_idx][self.str_idx] in self.gates:
+            self.error_at(self.current_file.token_idx, "gate "+self.current_file.token[self.current_file.token_idx][self.str_idx]+\
+                f" already defined in {self.gates[self.current_file.token[self.current_file.token_idx][self.str_idx]].filename}")
+        name = self.current_file.token[self.current_file.token_idx][self.str_idx] 
         # Set the current gate name
         GATE_DEF_name_pre = self.GATE_DEF_name
+        GATE_define_pre = self.GATE_define
+        self.GATE_define = False
         self.GATE_DEF_name = name
-        self.token_idx += 1
+        self.get_next_token()
         params = []
-        if self.check_operator_str(self.token_idx, "("):
-            self.token_idx += 1
+        if self.check_operator_str(self.current_file.token_idx, "("):
+            self.get_next_token()
             # Check for some errors 
-            if self.check_TK_kind(self.token_idx) != token.TK_IDENT and not self.check_operator_str(self.token_idx, ")"):
-                self.error_at(self.token_idx, "The parameters should be identifiers")
+            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT and not self.check_operator_str(self.current_file.token_idx, ")"):
+                self.error_at(self.current_file.token_idx, "The parameters should be identifiers")
             # Check for nonempty parameters
-            if self.check_TK_kind(self.token_idx) == token.TK_IDENT:
+            if self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
                 params.extend(self.idlist_param())
             self.expect(")")
         # Check whether the arguments are missing or wrong type is used
-        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-            if self.check_operator_str(self.token_idx, "{"):
-                self.error_at(self.token_idx, "The arguments are missing")
-            elif self.check_operator_str(self.token_idx, ";"):
-                self.error_at(self.token_idx, "The arguments and the contents are missing")
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            if self.check_operator_str(self.current_file.token_idx, "{"):
+                self.error_at(self.current_file.token_idx, "The arguments are missing")
+            elif self.check_operator_str(self.current_file.token_idx, ";"):
+                self.error_at(self.current_file.token_idx, "The arguments and the contents are missing")
             else:
-                self.error_at(self.token_idx, "The arguments cannot be this type")
+                self.error_at(self.current_file.token_idx, "The arguments cannot be this type")
         args = self.idlist_qubit().qregs
         gate_val = Gate(name)
         gate_val.add_params(params)
         gate_val.add_args(args)
+        gate_val.add_filename(self.current_file.name)
         self.gates[name] = gate_val # Add the node to the dictionary here because the error check inside the contents need to use the parameters and arguments
         # Set the gate_define flag to true to indicate that the current state is a gate definition
-        GATE_define_pre = self.GATE_define
         self.GATE_define = True
         self.expect("{")
-        while not self.check_operator_str(self.token_idx, "}"):
+        while not self.check_operator_str(self.current_file.token_idx, "}"):
             self.gates[name].add_contents(self.uop())
         self.expect("}")
         # recover the gate_define flag and gate_def name to come back to the previous state
@@ -559,54 +654,57 @@ class Parser(Token):
         self.GATE_DEF_name = GATE_DEF_name_pre
         node_gatedecl = Parser.create_node(ND_GATE_DEC)
         node_gatedecl.add_str(name)
+        # Check whether the gate defined is the gate we want to find if the gate is not found for the parent file
+        if (not self.GATE_FOUND) and (self.gate_name_find == name):
+            self.GATE_FOUND = True
         return node_gatedecl
                 
     # Recursive descent parsing for 'qop := uop | measure argument -> argument ; | reset argument ;'
     def qop(self):
         # Recursive descent parsing for 'measure argument -> argument ;'
-        if self.check_TK_kind(self.token_idx) == token.TK_MEASURE:
-            self.token_idx += 1
+        if self.check_TK_kind(self.current_file.token_idx) == token.TK_MEASURE:
+            self.get_next_token()
             # Check whether the argument is missing or wrong type is used 
-            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-                if self.check_operator_str(self.token_idx, "->"):
-                    self.error_at(self.token_idx, "The qreg argument is missing")
-                elif self.check_operator_str(self.token_idx, ";"):
-                    self.error_at(self.token_idx, "The qreg argument and the destination are missing")
+            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.current_file.token_idx, "->"):
+                    self.error_at(self.current_file.token_idx, "The qreg argument is missing")
+                elif self.check_operator_str(self.current_file.token_idx, ";"):
+                    self.error_at(self.current_file.token_idx, "The qreg argument and the destination are missing")
                 else:
-                    self.error_at(self.token_idx, "The qreg argument cannot be this type")
+                    self.error_at(self.current_file.token_idx, "The qreg argument cannot be this type")
             self.MEASURE = True
             node_lhs = self.argument()
             self.expect("->")
             # Check whether the destination is missing or wrong type is used
-            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-                if self.check_operator_str(self.token_idx, ";"):
-                    self.error_at(self.token_idx, "The creg destination is missing")
+            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.current_file.token_idx, ";"):
+                    self.error_at(self.current_file.token_idx, "The creg destination is missing")
                 else:
-                    self.error_at(self.token_idx, "The creg destination cannot be this type")
+                    self.error_at(self.current_file.token_idx, "The creg destination cannot be this type")
             node_rhs = self.argument_c()
             # Check whether the qreg and creg are of the same size if they are not indexed
             if node_lhs.qregs[0][1] == -1 and node_rhs.cregs[0][1] == -1:
                 if self.qregs[node_lhs.qregs[0][0]] != self.cregs[node_rhs.cregs[0][0]]:
-                    self.error_at(self.token_idx-1, "The qreg and creg should be of the same size for measurement")
+                    self.error_at(self.current_file.token_idx-1, "The qreg and creg should be of the same size for measurement")
             # Check whether the qreg and creg are of the same size if only one of them is indexed
             if node_lhs.qregs[0][1] == -1 and node_rhs.cregs[0][1] != -1:
                 if self.qregs[node_lhs.qregs[0][0]] != 1:
-                    self.error_at(self.token_idx-4, "Multiple qubits cannot be measured into a single bit")
+                    self.error_at(self.current_file.token_idx-4, "Multiple qubits cannot be measured into a single bit")
             if node_lhs.qregs[0][1] != -1 and node_rhs.cregs[0][1] == -1:
                 if self.cregs[node_rhs.cregs[0][0]] != 1:
-                    self.error_at(self.token_idx-1, "Single qubit cannot be measured into multiple bits")
+                    self.error_at(self.current_file.token_idx-1, "Single qubit cannot be measured into multiple bits")
             self.MEASURE = False
             self.expect(";")
             node_qof = Parser.create_node(ND_MEASURE, node_lhs, node_rhs)
             return node_qof
-        elif self.check_TK_kind(self.token_idx) == token.TK_RESET:
-            self.token_idx += 1
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RESET:
+            self.get_next_token()
             # Check whether the argument is missing or wrong type is used
-            if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-                if self.check_operator_str(self.token_idx, ";"):
-                    self.error_at(self.token_idx, "The qreg argument is missing")
+            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+                if self.check_operator_str(self.current_file.token_idx, ";"):
+                    self.error_at(self.current_file.token_idx, "The qreg argument is missing")
                 else:
-                    self.error_at(self.token_idx, "The qreg argument cannot be this type")
+                    self.error_at(self.current_file.token_idx, "The qreg argument cannot be this type")
             self.RESET = True
             node_lhs = self.argument()
             self.expect(";")
@@ -619,67 +717,67 @@ class Parser(Token):
     # Recursive descent parsing for 'argument := id | id [nninteger]'
     def argument(self):
         # Check whether the argument is identifier
-        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-            self.error_at(self.token_idx, "The qreg argument should be an identifier")
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            self.error_at(self.current_file.token_idx, "The qreg argument should be an identifier")
         # Check whether the argument is declared for the gate definition
         if self.GATE_define:
-            if not self.token[self.token_idx][self.str_idx] in self.gates[self.GATE_DEF_name].args:
-                self.error_at(self.token_idx, "The argument "+self.token[self.token_idx][self.str_idx]+" is not declared in gate "+self.GATE_DEF_name)
+            if not self.current_file.token[self.current_file.token_idx][self.str_idx] in self.gates[self.GATE_DEF_name].args:
+                self.error_at(self.current_file.token_idx, "The argument "+self.current_file.token[self.current_file.token_idx][self.str_idx]+" is not declared in gate "+self.GATE_DEF_name)
         # Check whether the argument is already defined 
-        if (not self.GATE_define) and (not self.token[self.token_idx][self.str_idx] in self.qregs):
-            self.error_at(self.token_idx, "qreg "+self.token[self.token_idx][self.str_idx]+" not defined")
-        name = self.token[self.token_idx][self.str_idx]
-        self.token_idx += 1
+        if (not self.GATE_define) and (not self.current_file.token[self.current_file.token_idx][self.str_idx] in self.qregs):
+            self.error_at(self.current_file.token_idx, "qreg "+self.current_file.token[self.current_file.token_idx][self.str_idx]+" not defined")
+        name = self.current_file.token[self.current_file.token_idx][self.str_idx]
+        self.get_next_token()
         # Check whether the argument is indexed
-        if self.check_operator_str(self.token_idx, "["):
+        if self.check_operator_str(self.current_file.token_idx, "["):
             # Error happens if the argument is indexed in the gate definition
             if self.GATE_define:
-                self.error_at(self.token_idx, "The argument of gate definition cannot be indexed")
+                self.error_at(self.current_file.token_idx, "The argument of gate definition cannot be indexed")
             # Check whether the qreg size is missing or wrong type is used
-            self.token_idx += 1
+            self.get_next_token()
             self.check_num_error("qreg index")
-            index = int(self.token[self.token_idx][self.val_idx])
+            index = int(self.current_file.token[self.current_file.token_idx][self.val_idx])
             # Check whether the qreg index exceeds the size
             if index >= self.qregs[name]:
-                self.error_at(self.token_idx, "The qreg index exceeds the size")
+                self.error_at(self.current_file.token_idx, "The qreg index exceeds the size")
             node_argument = Parser.create_node_qreg((name, index))
-            self.token_idx += 1
+            self.get_next_token()
             self.expect("]")
             return node_argument
         else:
             # Check if the qreg is not indexed then it should be a qubit instead of a register
             if (not self.GATE_define) and (self.qregs[name] != 1) and (not self.MEASURE) and (not self.RESET):
-                self.error_at(self.token_idx, "The qreg "+name+" should be indexed")
+                self.error_at(self.current_file.token_idx, "The qreg "+name+" should be indexed")
             node_argument = Parser.create_node_qreg((name, -1))
             return node_argument
     
     # Recursive descent parsing for 'argument_c := id | id [nninteger]'
     def argument_c(self):
         # Check whether the argument is identifier
-        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-            self.error_at(self.token_idx, "The creg argument should be an identifier")
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            self.error_at(self.current_file.token_idx, "The creg argument should be an identifier")
         # Check whether the argument is already defined 
-        if not self.token[self.token_idx][self.str_idx] in self.cregs:
-            self.error_at(self.token_idx, "creg "+self.token[self.token_idx][self.str_idx]+" not defined")
-        name = self.token[self.token_idx][self.str_idx]
-        self.token_idx += 1
+        if not self.current_file.token[self.current_file.token_idx][self.str_idx] in self.cregs:
+            self.error_at(self.current_file.token_idx, "creg "+self.current_file.token[self.current_file.token_idx][self.str_idx]+" not defined")
+        name = self.current_file.token[self.current_file.token_idx][self.str_idx]
+        self.get_next_token()
         # Check whether the argument is indexed
-        if self.check_operator_str(self.token_idx, "["):
+        if self.check_operator_str(self.current_file.token_idx, "["):
             # Check whether the creg size is missing or wrong type is used
-            self.token_idx += 1
+            self.get_next_token()
             self.check_num_error("creg index")
-            index = int(self.token[self.token_idx][self.val_idx])
+            index = int(self.current_file.token[self.current_file.token_idx][self.val_idx])
             # Check whether the creg index exceeds the size
             if index >= self.cregs[name]:
-                self.error_at(self.token_idx, "The creg index exceeds the size")
+                self.error_at(self.current_file.token_idx, "The creg index exceeds the size")
             node_argument = Parser.create_node_creg((name, index))
-            self.token_idx += 1
+            self.get_next_token()
             self.expect("]")
             return node_argument
         else:
             # Check if the creg is not indexed then it should be a bit instead of a register
             if (self.cregs[name] != 1) and (not self.MEASURE):
-                self.error_at(self.token_idx, "The creg "+name+" should be indexed")
+                self.error_at(self.current_file.token_idx, "The creg "+name+" should be indexed")
             node_argument = Parser.create_node_creg((name, -1))
             return node_argument
     
@@ -710,88 +808,88 @@ class Parser(Token):
                    | id (explist) idlist ;'''
     
     def uop_with_explist_single(self, kind, name):
-        self.token_idx += 1
+        self.get_next_token()
         # Set the current gate name
-        self.GATE_name = name
+        self.GATE_name_support = name
         self.expect("(")
         # Check whether the explist is missing
-        if self.check_operator_str(self.token_idx, ")"):
-            self.error_at(self.token_idx, "The explist of "+name+" is missing")
+        if self.check_operator_str(self.current_file.token_idx, ")"):
+            self.error_at(self.current_file.token_idx, "The explist of "+name+" is missing")
         explist = self.explist()
         self.expect(")")
         # Check whether the argument is missing
-        if self.check_operator_str(self.token_idx, ";"):
-            self.error_at(self.token_idx, "The argument of "+name+" is missing")
+        if self.check_operator_str(self.current_file.token_idx, ";"):
+            self.error_at(self.current_file.token_idx, "The argument of "+name+" is missing")
         argument = self.argument()
         self.expect(";")
         node_uop = Parser.create_node(kind, explist, argument)
         return node_uop
     
     def uop_without_explist_single(self, kind, name):
-        self.token_idx += 1
+        self.get_next_token()
         # Check whether the argument is missing
-        if self.check_operator_str(self.token_idx, ";"):
-            self.error_at(self.token_idx, "The argument of"+name+"is missing")
+        if self.check_operator_str(self.current_file.token_idx, ";"):
+            self.error_at(self.current_file.token_idx, "The argument of"+name+"is missing")
         argument = self.argument()
         self.expect(";")
         node_uop = Parser.create_node(kind, argument)
         return node_uop
     
     def uop_without_explist_controlled(self, kind, name):
-        self.token_idx += 1
+        self.get_next_token()
         # Check whether the first argument is missing
-        if self.check_operator_str(self.token_idx, ","):
-            self.error_at(self.token_idx, "The first argument of "+name+" is missing")
+        if self.check_operator_str(self.current_file.token_idx, ","):
+            self.error_at(self.current_file.token_idx, "The first argument of "+name+" is missing")
         # argument_lhs = self.argument()
         # self.expect(",")
         argument_rhs = None
         argument_lhs = self.idlist_qubit()
-        if len(argument_lhs.qregs) == 2 and self.check_operator_str(self.token_idx, ";"):
+        if len(argument_lhs.qregs) == 2 and self.check_operator_str(self.current_file.token_idx, ";"):
             argument_rhs = Parser.create_node_qreg(argument_lhs.qregs[1])
             argument_lhs.qregs.pop()
-            target_idx = self.token_idx
+            target_idx = self.current_file.token_idx
             # Check whether the first argument is equal to the second argument
             if argument_lhs.qregs[0][0] == argument_rhs.qregs[0][0] and argument_lhs.qregs[0][1] == argument_rhs.qregs[0][1]:
                 self.error_at(target_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
         else:
             self.expect(":")
             # Check whether the second argument is missing
-            if self.check_operator_str(self.token_idx, ";"):
-                self.error_at(self.token_idx, "The second argument of "+name+" is missing")
+            if self.check_operator_str(self.current_file.token_idx, ";"):
+                self.error_at(self.current_file.token_idx, "The second argument of "+name+" is missing")
             argument_rhs = self.argument()
         self.expect(";")
         node_uop = Parser.create_node(kind, argument_lhs, argument_rhs)
         return node_uop
     
     def uop_with_explist_controlled(self, kind, name):
-        self.token_idx += 1
+        self.get_next_token()
         # Set the current gate name
-        self.GATE_name = name
+        self.GATE_name_support = name
         self.expect("(")
         # Check whether the explist is missing
-        if self.check_operator_str(self.token_idx, ")"):
-            self.error_at(self.token_idx, "The explist of "+name+" is missing")
+        if self.check_operator_str(self.current_file.token_idx, ")"):
+            self.error_at(self.current_file.token_idx, "The explist of "+name+" is missing")
         explist = self.explist()
         self.expect(")")
         # Check whether the first argument is missing
-        if self.check_operator_str(self.token_idx, ","):
-            self.error_at(self.token_idx, "The first argument of "+name+" is missing")
+        if self.check_operator_str(self.current_file.token_idx, ","):
+            self.error_at(self.current_file.token_idx, "The first argument of "+name+" is missing")
         # argument_control = self.argument()
         # self.expect(",")
         argument_target = None
         argument_control = self.idlist_qubit()
-        if len(argument_control.qregs) == 2 and self.check_operator_str(self.token_idx, ";"):
+        if len(argument_control.qregs) == 2 and self.check_operator_str(self.current_file.token_idx, ";"):
             argument_target = Parser.create_node_qreg(argument_control.qregs[1])
             argument_control.qregs.pop()
-            target_idx = self.token_idx
+            target_idx = self.current_file.token_idx
             # Check whether the first argument is equal to the second argument
             if argument_control.qregs[0][0] == argument_target.qregs[0][0] and argument_control.qregs[0][1] == argument_target.qregs[0][1]:
                 self.error_at(target_idx, "The control qubit and the target qubit of "+name+" cannot be the same")
         else:
             self.expect(":")
             # Check whether the second argument is missing
-            if self.check_operator_str(self.token_idx, ";"):
-                self.error_at(self.token_idx, "The second argument of "+name+" is missing")
+            if self.check_operator_str(self.current_file.token_idx, ";"):
+                self.error_at(self.current_file.token_idx, "The second argument of "+name+" is missing")
                 argument_target = self.argument()
         argument_control.controlled_with_parameter = True
         self.expect(";")
@@ -801,190 +899,217 @@ class Parser(Token):
     
     def uop(self):
         # Recursive descent parsing for 'U (explist) argument ;'
-        if self.check_TK_kind(self.token_idx) == token.TK_U:
+        if self.check_TK_kind(self.current_file.token_idx) == token.TK_U:
             node_uop = self.uop_with_explist_single(ND_U, "U")
             return node_uop
         # Recursive descent parsing for 'CX argument , argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CX:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CX:
             node_uop = self.uop_without_explist_controlled(ND_CX, "CX")
             return node_uop
         # Recursive descent parsing for 'X argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_X:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_X:
             node_uop = self.uop_without_explist_single(ND_X, "X")
             return node_uop
         # Recursive descent parsing for 'Y argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_Y:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_Y:
             node_uop = self.uop_without_explist_single(ND_Y, "Y")
             return node_uop
         # Recursive descent parsing for 'Z argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_Z:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_Z:
             node_uop = self.uop_without_explist_single(ND_Z, "Z")
             return node_uop
         # Recursive descent parsing for 'S argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_S:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_S:
             node_uop = self.uop_without_explist_single(ND_S, "S") 
             return node_uop
         # Recursive descent parsing for 'T argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_T:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_T:
             node_uop = self.uop_without_explist_single(ND_T, "T")
             return node_uop
         # Recursive descent parsing for 'RTHETA (explist) argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_RTHETA:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RTHETA:
             node_uop = self.uop_with_explist_single(ND_RTHETA, "RTHETA")
             return node_uop
         # Recursive descent parsing for 'RX (explist) argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_RX:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RX:
             node_uop = self.uop_with_explist_single(ND_RX, "RX")
             return node_uop
         # Recursive descent parsing for 'RY (explist) argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_RY:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RY:
             node_uop = self.uop_with_explist_single(ND_RY, "RY")
             return node_uop
         # Recursive descent parsing for 'RZ (explist) argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_RZ:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RZ:
             node_uop = self.uop_with_explist_single(ND_RZ, "RZ")
             return node_uop
         # Recursive descent parsing for 'H argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_H:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_H:
             node_uop = self.uop_without_explist_single(ND_H, "H")
             return node_uop
         # Recursive descent parsing for 'CY argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CY:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CY:
             node_uop = self.uop_without_explist_controlled(ND_CY, "CY")
             return node_uop
         # Recursive descent parsing for 'CZ argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CZ:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CZ:
             node_uop = self.uop_without_explist_controlled(ND_CZ, "CZ")
             return node_uop
         # Recursive descent parsing for 'CU (explist) argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CU:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CU:
             node_uop = self.uop_with_explist_controlled(ND_CU, "CU")
             return node_uop
         # Recursive descent parsing for 'CS argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CS:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CS:
             node_uop = self.uop_without_explist_controlled(ND_CS, "CS")
             return node_uop
         # Recursive descent parsing for 'CT argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CT:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CT:
             node_uop = self.uop_without_explist_controlled(ND_CT, "CT")
             return node_uop
         # Recursive descent parsing for 'CRTHETA (explist) argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CRTHETA:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CRTHETA:
             node_uop = self.uop_with_explist_controlled(ND_CRTHETA, "CRTHETA")
             return node_uop
         # Recursive descent parsing for 'CRX (explist) argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CRX:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CRX:
             node_uop = self.uop_with_explist_controlled(ND_CRX, "CRX")
             return node_uop
         # Recursive descent parsing for 'CRY (explist) argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CRY:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CRY:
             node_uop = self.uop_with_explist_controlled(ND_CRY, "CRY")
             return node_uop
         # Recursive descent parsing for 'CRZ (explist) argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CRZ:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CRZ:
             node_uop = self.uop_with_explist_controlled(ND_CRZ, "CRZ")
             return node_uop
         # Recursive descent parsing for 'CH argument, argument ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_CH:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CH:
             node_uop = self.uop_without_explist_controlled(ND_CH, "CH")
             return node_uop
         # Recursive descent parsing for 'id idlist ; | id () idlist ; | id (explist) idlist ;'
-        elif self.check_TK_kind(self.token_idx) == token.TK_IDENT:
-            name = self.token[self.token_idx][self.str_idx]
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
+            name = self.current_file.token[self.current_file.token_idx][self.str_idx]
             # Check whether the gate is a gate declare or an opaque declare
+            Gate_declare_pre = self.GATE_declare
+            Opaque_declare_pre = self.OPAQUE_declare
             if name in self.gates:
                 self.GATE_declare = True
             elif name in self.opaques:
                 self.OPAQUE_declare = True
             else:
-                self.error_at(self.token_idx, f"gate {name} not defined")
+                gate_found_pre = self.GATE_FOUND
+                gate_name_find_pre = self.gate_name_find
+                self.GATE_FOUND = False
+                self.gate_name_find = name
+                file_need_find_pre = self.file_need_find
+                self.file_need_find = self.current_file
+                if not self.check_included_files(self.current_file):
+                    self.error_at(self.current_file.token_idx, f"gate {name} not defined")
+                self.current_file = self.file_need_find
+                self.file_need_find = file_need_find_pre
+                self.GATE_declare = True
+                self.GATE_FOUND = gate_found_pre
+                self.gate_name_find = gate_name_find_pre
+            
+            gate_name_pre = self.GATE_name 
             self.GATE_name = name
-            self.token_idx += 1
-            if self.check_operator_str(self.token_idx, "("):
-                self.token_idx += 1
-                if self.check_operator_str(self.token_idx, ")"):
+            print(self.current_file.name)
+            print(self.current_file.token[self.current_file.token_idx][self.str_idx])
+            self.get_next_token()
+            if self.check_operator_str(self.current_file.token_idx, "("):
+                self.get_next_token()
+                if self.check_operator_str(self.current_file.token_idx, ")"):
                     self.expect(")")
                     # Check whether the arguments are missing or wrong type is used
-                    if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-                        if self.check_operator_str(self.token_idx, ";"):
-                            self.error_at(self.token_idx, "The arguments of the gate are missing")
+                    if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+                        if self.check_operator_str(self.current_file.token_idx, ";"):
+                            self.error_at(self.current_file.token_idx, "The arguments of the gate are missing")
                         else:
-                            self.error_at(self.token_idx, "The arguments cannot be this type")
+                            self.error_at(self.current_file.token_idx, "The arguments cannot be this type")
                     args = self.idlist_qubit()
                     self.expect(";")
                     node_uop = Parser.create_node(ND_GATE_NOEXP, args)
                     # Add the gate name to the node for later circuit generation
                     node_uop.add_str(name)
                     # Flip the GATE_declare flag to change the current state back to normal
-                    self.GATE_declare = False
-                    self.OPAQUE_declare = False
+                    # self.GATE_declare = False
+                    # self.OPAQUE_declare = False
+                    self.GATE_declare = Gate_declare_pre
+                    self.OPAQUE_declare = Opaque_declare_pre
+                    self.GATE_name = gate_name_pre
                     return node_uop
                 else:
                     explist = self.explist()
                     self.expect(")")
                      # Check whether the arguments are missing or wrong type is used
-                    if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-                        if self.check_operator_str(self.token_idx, ";"):
-                            self.error_at(self.token_idx, "The arguments of the gate are missing")
+                    if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+                        if self.check_operator_str(self.current_file.token_idx, ";"):
+                            self.error_at(self.current_file.token_idx, "The arguments of the gate are missing")
                         else:
-                            self.error_at(self.token_idx, "The arguments cannot be this type")
+                            self.error_at(self.current_file.token_idx, "The arguments cannot be this type")
                     args = self.idlist_qubit()
                     self.expect(";")
                     node_uop = Parser.create_node(ND_GATE_EXP, explist, args)
                     # Add the gate name to the node for later circuit generation
                     node_uop.add_str(name)
                     # Flip the GATE_declare flag to change the current state back to normal
-                    self.GATE_declare = False
-                    self.OPAQUE_declare = False
+                    # self.GATE_declare = False
+                    # self.OPAQUE_declare = False
+                    self.GATE_declare = Gate_declare_pre
+                    self.OPAQUE_declare = Opaque_declare_pre
+                    self.GATE_name = gate_name_pre
                     return node_uop
-            elif self.check_TK_kind(self.token_idx) == token.TK_IDENT:
+            elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
                 args = self.idlist_qubit()
                 self.expect(";")
                 node_uop = Parser.create_node(ND_GATE_NOEXP, args)
                 node_uop.add_str(name)
                 # Flip the GATE_declare flag to change the current state back to normal
-                self.GATE_declare = False
-                self.OPAQUE_declare = False
+                # self.GATE_declare = False
+                # self.OPAQUE_declare = False
+                self.GATE_declare = Gate_declare_pre
+                self.OPAQUE_declare = Opaque_declare_pre
+                self.GATE_name = gate_name_pre
                 return node_uop
             # Check for some errors
             else:
-                if self.check_operator_str(self.token_idx, ","):
-                    self.error_at(self.token_idx, "The gate name cannot be empty")
+                if self.check_operator_str(self.current_file.token_idx, ","):
+                    self.error_at(self.current_file.token_idx, "The gate name cannot be empty")
                 else:
-                    self.error_at(self.token_idx, "The arguments cannot be this type")
+                    self.error_at(self.current_file.token_idx, "The arguments cannot be this type")
         # Check for some errors
         else:
-            if self.check_operator_str(self.token_idx, ";"):
-                self.error_at(self.token_idx, "The gate operation cannot be empty")
+            if self.check_operator_str(self.current_file.token_idx, ";"):
+                self.error_at(self.current_file.token_idx, "The gate operation cannot be empty")
             else:
-                self.error_at(self.token_idx, "The gate operation cannot be this type")
+                self.error_at(self.current_file.token_idx, "The gate operation cannot be this type")
     
     # Recursive descent parsing for 'idlist := id | id [nninteger], idlist'
     def id_check_qubit(self, qreglist):
         # Check whether the argument is identifier
-        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-            self.error_at(self.token_idx, "The type should be identifier")
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            self.error_at(self.current_file.token_idx, "The type should be identifier")
         # Check whether the argument is already declared for the gate definition
         if self.GATE_define:
-            if not self.token[self.token_idx][self.str_idx] in self.gates[self.GATE_DEF_name].args:
-                self.error_at(self.token_idx, "The argument "+self.token[self.token_idx][self.str_idx]+" is not declared in gate "+self.GATE_DEF_name)
+            if not self.current_file.token[self.current_file.token_idx][self.str_idx] in self.gates[self.GATE_DEF_name].args:
+                self.error_at(self.current_file.token_idx, "The argument "+self.current_file.token[self.current_file.token_idx][self.str_idx]+" is not declared in gate "+self.GATE_DEF_name)
         # Check whether the qreg is already defined
-        if (not self.GATE_define) and (self.GATE_declare or self.OPAQUE_declare) and (not self.token[self.token_idx][self.str_idx] in self.qregs):
-            self.error_at(self.token_idx, "qreg "+self.token[self.token_idx][self.str_idx]+" not defined")
-        name = self.token[self.token_idx][self.str_idx]
-        self.token_idx += 1
+        if (not self.GATE_define) and (self.GATE_declare or self.OPAQUE_declare) and (not self.current_file.token[self.current_file.token_idx][self.str_idx] in self.qregs):
+            self.error_at(self.current_file.token_idx, "qreg "+self.current_file.token[self.current_file.token_idx][self.str_idx]+" not defined")
+        name = self.current_file.token[self.current_file.token_idx][self.str_idx]
+        self.get_next_token()
         # Check whether the argument is indexed
-        if self.check_operator_str(self.token_idx, "["):
+        if self.check_operator_str(self.current_file.token_idx, "["):
             # Error happens if the argument is indexed in the gate definition
             if self.GATE_define:
-                self.error_at(self.token_idx, "The argument of gate definition cannot be indexed")
-            self.token_idx += 1
+                self.error_at(self.current_file.token_idx, "The argument of gate definition cannot be indexed")
+            self.get_next_token()
             self.check_num_error("qreg index")
-            idx = int(self.token[self.token_idx][self.val_idx])
+            idx = int(self.current_file.token[self.current_file.token_idx][self.val_idx])
             # Check whether the qreg index exceeds the size
             if idx >= self.qregs[name]:
-                self.error_at(self.token_idx, "The qreg index exceeds the size")
-            self.token_idx += 1
+                self.error_at(self.current_file.token_idx, "The qreg index exceeds the size")
+            self.get_next_token()
             self.expect("]")
             qreglist.append((name, idx))
         else:
@@ -993,37 +1118,37 @@ class Parser(Token):
     def idlist_qubit(self):
         qreglist = []
         self.id_check_qubit(qreglist)
-        while self.check_operator_str(self.token_idx, ","):
+        while self.check_operator_str(self.current_file.token_idx, ","):
             self.expect(",")
             # Check for whether the number of arguments exceeds the gate defined
             if self.GATE_declare:
                 if len(qreglist) == len(self.gates[self.GATE_name].args):
-                    self.error_at(self.token_idx, f"The number of arguments exceeds the gate {self.GATE_name} defined")
+                    self.error_at(self.current_file.token_idx, f"The number of arguments exceeds the gate {self.GATE_name} defined")
             if self.OPAQUE_declare:
                 if len(qreglist) == len(self.opaques[self.GATE_name].args):
-                    self.error_at(self.token_idx, f"The number of arguments exceeds the opaque gate {self.GATE_name} defined")
+                    self.error_at(self.current_file.token_idx, f"The number of arguments exceeds the opaque gate {self.GATE_name} defined")
             self.id_check_qubit(qreglist)
         # Check for whether the number of arguments is less than the gate defined
         if self.GATE_declare:
             if len(qreglist) < len(self.gates[self.GATE_name].args):
-                self.error_at(self.token_idx, f"The number of arguments is less than the gate {self.GATE_name} defined")
+                self.error_at(self.current_file.token_idx, f"The number of arguments is less than the gate {self.GATE_name} defined")
         if self.OPAQUE_declare:
             if len(qreglist) < len(self.opaques[self.GATE_name].args):
-                self.error_at(self.token_idx, f"The number of arguments is less than the opaque gate {self.GATE_name} defined")
+                self.error_at(self.current_file.token_idx, f"The number of arguments is less than the opaque gate {self.GATE_name} defined")
         node_idlist = Parser.create_node_qreg(qreglist)
         return node_idlist
 
     def id_check(self, paramlist):
         # Check whether the argument is identifier
-        if self.check_TK_kind(self.token_idx) != token.TK_IDENT:
-            self.error_at(self.token_idx, "The type should be identifier")
-        paramlist.append(self.token[self.token_idx][self.str_idx])
-        self.token_idx += 1
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            self.error_at(self.current_file.token_idx, "The type should be identifier")
+        paramlist.append(self.current_file.token[self.current_file.token_idx][self.str_idx])
+        self.get_next_token()
     
     def idlist_param(self):
         paramlist = []
         self.id_check(paramlist)
-        while self.check_operator_str(self.token_idx, ","):
+        while self.check_operator_str(self.current_file.token_idx, ","):
             self.expect(",")
             self.id_check(paramlist)
         return paramlist
@@ -1052,54 +1177,54 @@ class Parser(Token):
     
     # Check for unary operators 
     def consume_unaryop(self):
-        TK_kind = self.check_TK_kind(self.token_idx)
+        TK_kind = self.check_TK_kind(self.current_file.token_idx)
         if TK_kind == token.TK_SIN:
-            self.token_idx += 1
+            self.get_next_token()
             return ND_SIN
         elif TK_kind == token.TK_COS:
-            self.token_idx += 1
+            self.get_next_token()
             return ND_COS
         elif TK_kind == token.TK_TAN:
-            self.token_idx += 1
+            self.get_next_token()
             return ND_TAN
         elif TK_kind == token.TK_EXP:
-            self.token_idx += 1
+            self.get_next_token()
             return ND_EXP
         elif TK_kind == token.TK_LN:
-            self.token_idx += 1
+            self.get_next_token()
             return ND_LN
         elif TK_kind == token.TK_SQRT:
-            self.token_idx += 1
+            self.get_next_token()
             return ND_SQRT
         else:
-            self.error_at(self.token_idx, "This unary operator is not supported")
+            self.error_at(self.current_file.token_idx, "This unary operator is not supported")
     
     # Recursive descent parsing for primary = real | nninteger | pi | id | unaryop"("exp")" | "("binaryop")"
     def primary(self):
         # Recursive descent parsing for real and nninteger
-        if self.check_TK_kind(self.token_idx) == token.TK_NUM:
-            val = self.token[self.token_idx][self.val_idx]*(10**self.token[self.token_idx][self.exp_idx])
+        if self.check_TK_kind(self.current_file.token_idx) == token.TK_NUM:
+            val = self.current_file.token[self.current_file.token_idx][self.val_idx]*(10**self.current_file.token[self.current_file.token_idx][self.exp_idx])
             node_primary = Parser.create_node_num(val)
-            self.token_idx += 1
+            self.current_file.token_idx += 1
             return node_primary
         # Recursive descent parsing for pi
-        elif self.check_TK_kind(self.token_idx) == token.TK_PI:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_PI:
             node_primary = Parser.create_node(ND_PI)
-            self.token_idx += 1
+            self.get_next_token()
             return node_primary
         # Recursive descent parsing for id
-        elif self.check_TK_kind(self.token_idx) == token.TK_IDENT:
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
             # Note! Here should be a check for whether the parameter is declared for this gate, this check will be in the code generation part
             node_primary = Parser.create_node(ND_IDENT)
-            node_primary.add_str(self.token[self.token_idx][self.str_idx])
+            node_primary.add_str(self.current_file.token[self.current_file.token_idx][self.str_idx])
             # Check if the identifier of the parameter is already defined for gate definition
             if self.GATE_define:
-                if self.token[self.token_idx][self.str_idx] not in self.gates[self.GATE_DEF_name].params:
-                    self.error_at(self.token_idx, f"The parameter {self.token[self.token_idx][self.str_idx]} is not defined for gate {self.GATE_DEF_name}")
-            self.token_idx += 1
+                if self.current_file.token[self.current_file.token_idx][self.str_idx] not in self.gates[self.GATE_DEF_name].params:
+                    self.error_at(self.current_file.token_idx, f"The parameter {self.current_file.token[self.current_file.token_idx][self.str_idx]} is not defined for gate {self.GATE_DEF_name}")
+            self.get_next_token()
             return node_primary
         # Recursive descent parsing for "("binaryop")"
-        elif self.check_operator_str(self.token_idx, "("):
+        elif self.check_operator_str(self.current_file.token_idx, "("):
             self.consume_operator_str("(")
             node_primary = self.binaryop()
             self.expect(")")
@@ -1118,31 +1243,31 @@ class Parser(Token):
     # Define the function to get the precedence of the current binary operator
     def get_binaryop_precedence(self):
         # Check whether the current token is an operator
-        if self.check_TK_kind(self.token_idx) != token.TK_OPERATOR:
-            self.error_at(self.token_idx, "This is not an operator")
+        if self.check_TK_kind(self.current_file.token_idx) != token.TK_OPERATOR:
+            self.error_at(self.current_file.token_idx, "This is not an operator")
         # Check whether the current operator is supported
-        if not self.token[self.token_idx][self.str_idx] in binop_precedence:
-            self.error_at(self.token_idx, "This operator is not supported")
-        precedence = binop_precedence[self.token[self.token_idx][self.str_idx]]
+        if not self.current_file.token[self.current_file.token_idx][self.str_idx] in binop_precedence:
+            self.error_at(self.current_file.token_idx, "This operator is not supported")
+        precedence = binop_precedence[self.current_file.token[self.current_file.token_idx][self.str_idx]]
         return precedence
     
     # Define the function to get the node kind of the current binary operator
     def get_binaryop(self):
         # Since this function will only be used after the precedence check, the current token must be an operator supported, so no need to check error
-        if self.token[self.token_idx][self.str_idx] == "+":
-            self.token_idx += 1
+        if self.current_file.token[self.current_file.token_idx][self.str_idx] == "+":
+            self.current_file.token_idx += 1
             return ND_ADD
-        elif self.token[self.token_idx][self.str_idx] == "-":
-            self.token_idx += 1
+        elif self.current_file.token[self.current_file.token_idx][self.str_idx] == "-":
+            self.get_next_token()
             return ND_SUB
-        elif self.token[self.token_idx][self.str_idx] == "*":
-            self.token_idx += 1
+        elif self.current_file.token[self.current_file.token_idx][self.str_idx] == "*":
+            self.get_next_token()
             return ND_MUL
-        elif self.token[self.token_idx][self.str_idx] == "/":
-            self.token_idx += 1
+        elif self.current_file.token[self.current_file.token_idx][self.str_idx] == "/":
+            self.get_next_token()
             return ND_DIV
         else:
-            self.token_idx += 1
+            self.get_next_token()
             return ND_POW
     
     # Define the function needed for recursively parsing the binaryop
@@ -1159,7 +1284,7 @@ class Parser(Token):
             # Parse the expression after the binary operator
             rhs = self.exp_prim()
             if rhs is None:
-                self.error_at(self.token_idx, "The expression after the binary operator cannot be empty")
+                self.error_at(self.current_file.token_idx, "The expression after the binary operator cannot be empty")
             # If this is a binary operator that binds less tightly with RHS than the operator after RHS, let the pending operator take RHS as its LHS
             next_prec = self.get_binaryop_precedence()
             if prec < next_prec:
@@ -1172,7 +1297,7 @@ class Parser(Token):
         # First parse the left hand side
         lhs = self.exp_prim()
         if lhs is None:
-            self.error_at(self.token_idx, "The expression before the binary operator cannot be empty")
+            self.error_at(self.current_file.token_idx, "The expression before the binary operator cannot be empty")
         # Then parse the right hand side, the precedence of the first binary operator is 0
         return self.ParseBinaryopRHS(0, lhs)
     
@@ -1180,30 +1305,31 @@ class Parser(Token):
     def explist(self):
         exp_list = []
         exp_list.append(self.exp())
-        while self.check_operator_str(self.token_idx, ","):
+        while self.check_operator_str(self.current_file.token_idx, ","):
             self.expect(",")
             # Check whether the number of parameters exceeds the number of parameters required for the gate
             if self.GATE_declare:
                 if len(exp_list) == len(self.gates[self.GATE_name].params):
-                    self.error_at(self.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
+                    self.error_at(self.current_file.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
             elif self.OPAQUE_declare:
                 if len(exp_list) == len(self.opaques[self.GATE_name].params):
-                    self.error_at(self.token_idx, f"The number of parameters exceeds the number of parameters required for opaque {self.GATE_name}")
+                    
+                    self.error_at(self.current_file.token_idx, f"The number of parameters exceeds the number of parameters required for opaque {self.GATE_name}")
             else:
-                if len(exp_list) == quantumcircuit.Param_Num_Table[self.GATE_name]:
-                    self.error_at(self.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
+                if len(exp_list) == quantumcircuit.Param_Num_Table[self.GATE_name_support]:
+                    self.error_at(self.current_file.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
                 
             exp_list.append(self.exp())
         # Check whether the number of parameters is less than the number of parameters required for the gate
         if self.GATE_declare:
             if len(exp_list) < len(self.gates[self.GATE_name].params):
-                self.error_at(self.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
+                self.error_at(self.current_file.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
         elif self.OPAQUE_declare:
              if len(exp_list) < len(self.opaques[self.GATE_name].params):
-                self.error_at(self.token_idx, f"The number of parameters is less than the number of parameters required for opaque {self.GATE_name}")
+                self.error_at(self.current_file.token_idx, f"The number of parameters is less than the number of parameters required for opaque {self.GATE_name}")
         else:
-            if len(exp_list) < quantumcircuit.Param_Num_Table[self.GATE_name]:
-                self.error_at(self.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
+            if len(exp_list) < quantumcircuit.Param_Num_Table[self.GATE_name_support]:
+                self.error_at(self.current_file.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
         node_explist = Parser.create_node_explist(exp_list)
         return node_explist
     
@@ -1613,8 +1739,10 @@ class Parser(Token):
     #================================================================================================
     @staticmethod
     def compile(filepath):
-        str, TK, include_dic = Token.Tokenize(filepath)
-        parser = Parser(TK, str, include_dic)
+        filename, file_str, TK, include_dic = Token.Tokenize(filepath)
+        file_node = Filesystem(filename, file_str, TK)
+        file_node.set_include_dict(include_dic)
+        parser = Parser(file_node)
         parser.Recursive_Descent_Parsing()
         QC = parser.circuit_gen()
         return QC
