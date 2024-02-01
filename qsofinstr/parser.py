@@ -310,13 +310,10 @@ class Parser(Token):
                 filenode.include_dict[file] = file_node
             # if the file is already completely parsed, then skip it
             if filenode.include_dict[file].token[filenode.include_dict[file].token_idx][self.kind_idx] == token.TK_EOF:
-                print("The file "+filenode.include_dict[file].name+" is already parsed")
                 continue
-            print("Parsing the file "+filenode.include_dict[file].name)
             # parsing the file and if the gate definition is found, the while loop will be terminated
             # set the current filenode of the parser to this file
             self.current_file = filenode.include_dict[file]
-            print("current file is"+self.current_file.name)
             while (not self.GATE_FOUND) and (filenode.include_dict[file].token[filenode.include_dict[file].token_idx][self.kind_idx] != token.TK_EOF):
                 self.statement()
             # reference back to the parent file
@@ -1004,6 +1001,7 @@ class Parser(Token):
                 file_need_find_pre = self.file_need_find
                 self.file_need_find = self.current_file
                 if not self.check_included_files(self.current_file):
+                    self.current_file = self.file_need_find
                     self.error_at(self.current_file.token_idx, f"gate {name} not defined")
                 self.current_file = self.file_need_find
                 self.file_need_find = file_need_find_pre
@@ -1013,8 +1011,6 @@ class Parser(Token):
             
             gate_name_pre = self.GATE_name 
             self.GATE_name = name
-            print(self.current_file.name)
-            print(self.current_file.token[self.current_file.token_idx][self.str_idx])
             self.get_next_token()
             if self.check_operator_str(self.current_file.token_idx, "("):
                 self.get_next_token()
@@ -1748,10 +1744,6 @@ class Parser(Token):
         return QC
     
 filepath = "qsofinstr/check.qasm"
-# str, TK = Token.Tokenize(filepath)
-# parser = Parser(TK, str)
-# parser.Recursive_Descent_Parsing()
-# QC = parser.circuit_gen()
 QC = Parser.compile(filepath)
 QC.test_draw()    
     

@@ -10,3 +10,7 @@ gate include_test2(param1, param2) a, b{
 gate check3 a{
     Y a;
 }
+
+gate check4 a{
+    W a;
+}

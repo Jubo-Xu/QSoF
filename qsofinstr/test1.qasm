@@ -4,3 +4,7 @@ gate include_test1(param1, param2) a, b {
     RY(param2) b;
     include_test2(param1, param2) a, b;
 }
+
+//gate test3 a{
+//    W a;
+//}
