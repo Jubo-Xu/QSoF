@@ -213,6 +213,8 @@ class Parser(Token):
         self.gate_name_find = "" # The gate name that needs to be found
         self.file_need_find = filenode
         self.GATE_FOUND = True # The flag to indicate whether the gate is found
+        # The dictionary for the multi-controlled qubits, where the key is the qubit name, and the element is the index of the qubit
+        self.MULTI_CONTROL_QUBITS = {}
         
         
     @staticmethod
@@ -454,6 +456,7 @@ class Parser(Token):
                     self.opaques[name] = opaque_instance
                     node_stmt = Parser.create_node(ND_OPAQUE)
                     node_stmt.add_str(name)
+                    self.MULTI_CONTROL_QUBITS.clear()
                     return node_stmt
                 # Recursive descent parsing for 'opaque id () idlist ;'
                 elif self.check_operator_str(self.current_file.token_idx+3, ")"):
@@ -466,6 +469,7 @@ class Parser(Token):
                     self.opaques[name] = opaque_instance
                     node_stmt = Parser.create_node(ND_OPAQUE)
                     node_stmt.add_str(name)
+                    self.MULTI_CONTROL_QUBITS.clear()
                     return node_stmt
                 else:
                     self.error_at(self.current_file.token_idx+3, "The parameters could only be identifiers or empty")
@@ -480,6 +484,7 @@ class Parser(Token):
                 self.opaques[name] = opaque_instance
                 node_stmt = Parser.create_node(ND_OPAQUE)
                 node_stmt.add_str(name)
+                self.MULTI_CONTROL_QUBITS.clear()
                 return node_stmt
             # Check for some errors
             else:
@@ -505,6 +510,7 @@ class Parser(Token):
             self.get_next_token()
             args = self.idlist_qubit()
             self.expect(";")
+            self.MULTI_CONTROL_QUBITS.clear()
             return Parser.create_node(ND_BARRIER, args)
         # Recursive descent parsing for 'qop'
         else:
@@ -654,6 +660,7 @@ class Parser(Token):
         # Check whether the gate defined is the gate we want to find if the gate is not found for the parent file
         if (not self.GATE_FOUND) and (self.gate_name_find == name):
             self.GATE_FOUND = True
+        self.MULTI_CONTROL_QUBITS.clear()
         return node_gatedecl
                 
     # Recursive descent parsing for 'qop := uop | measure argument -> argument ; | reset argument ;'
@@ -853,9 +860,17 @@ class Parser(Token):
             # Check whether the second argument is missing
             if self.check_operator_str(self.current_file.token_idx, ";"):
                 self.error_at(self.current_file.token_idx, "The second argument of "+name+" is missing")
+            arg_idx = self.current_file.token_idx  
             argument_rhs = self.argument()
+            print(argument_rhs.qregs[0][0])
+            print(argument_rhs.qregs[0][1])
+            print(self.MULTI_CONTROL_QUBITS)
+            targetname = argument_rhs.qregs[0][0]+f"[{argument_rhs.qregs[0][1]}]" if argument_rhs.qregs[0][1] != -1 else argument_rhs.qregs[0][0]
+            if (targetname in self.MULTI_CONTROL_QUBITS) and (argument_rhs.qregs[0][1] == self.MULTI_CONTROL_QUBITS[targetname]):
+                self.error_at(arg_idx, "The control qubit of "+name+" cannot be the target qubit")
         self.expect(";")
         node_uop = Parser.create_node(kind, argument_lhs, argument_rhs)
+        self.MULTI_CONTROL_QUBITS.clear()
         return node_uop
     
     def uop_with_explist_controlled(self, kind, name):
@@ -887,11 +902,17 @@ class Parser(Token):
             # Check whether the second argument is missing
             if self.check_operator_str(self.current_file.token_idx, ";"):
                 self.error_at(self.current_file.token_idx, "The second argument of "+name+" is missing")
-                argument_target = self.argument()
+            arg_idx = self.current_file.token_idx
+            argument_target = self.argument()
+            targetname = argument_target.qregs[0][0]+f"[{argument_target.qregs[0][1]}]" if argument_target.qregs[0][1] != -1 else argument_target.qregs[0][0]
+            if (targetname in self.MULTI_CONTROL_QUBITS) and (argument_target.qregs[0][1] == self.MULTI_CONTROL_QUBITS[targetname]):
+                self.error_at(arg_idx, "The control qubit of "+name+" cannot be the target qubit")
+            
         argument_control.controlled_with_parameter = True
         self.expect(";")
         argument_control.add_left(argument_target)
         node_uop = Parser.create_node(kind, explist, argument_control)
+        self.MULTI_CONTROL_QUBITS.clear()
         return node_uop
     
     def uop(self):
@@ -1033,6 +1054,7 @@ class Parser(Token):
                     self.GATE_declare = Gate_declare_pre
                     self.OPAQUE_declare = Opaque_declare_pre
                     self.GATE_name = gate_name_pre
+                    self.MULTI_CONTROL_QUBITS.clear()
                     return node_uop
                 else:
                     explist = self.explist()
@@ -1054,6 +1076,7 @@ class Parser(Token):
                     self.GATE_declare = Gate_declare_pre
                     self.OPAQUE_declare = Opaque_declare_pre
                     self.GATE_name = gate_name_pre
+                    self.MULTI_CONTROL_QUBITS.clear()
                     return node_uop
             elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
                 args = self.idlist_qubit()
@@ -1066,6 +1089,7 @@ class Parser(Token):
                 self.GATE_declare = Gate_declare_pre
                 self.OPAQUE_declare = Opaque_declare_pre
                 self.GATE_name = gate_name_pre
+                self.MULTI_CONTROL_QUBITS.clear()
                 return node_uop
             # Check for some errors
             else:
@@ -1108,8 +1132,10 @@ class Parser(Token):
             self.get_next_token()
             self.expect("]")
             qreglist.append((name, idx))
+            self.MULTI_CONTROL_QUBITS[name+f"[{idx}]"] = idx
         else:
             qreglist.append((name, -1))
+            self.MULTI_CONTROL_QUBITS[name] = -1
         
     def idlist_qubit(self):
         qreglist = []
@@ -1743,10 +1769,10 @@ class Parser(Token):
         QC = parser.circuit_gen()
         return QC
     
-filepath = "qsofinstr/check.qasm"
+filepath = "qsofinstr/check2.qasm"
 QC = Parser.compile(filepath)
 QC.test_draw()    
-    
+
     
     
     
