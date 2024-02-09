@@ -20,7 +20,9 @@ Param_Num_Table = {
     "CRX": 1,
     "CRY": 1,
     "CRZ": 1,
-    "CU": 3
+    "CU": 3,
+    "U1": 1,
+    "U2": 2
 }
 
 class Time_slice_node:

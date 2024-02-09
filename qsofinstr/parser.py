@@ -57,7 +57,11 @@ ND_PI = 46
 ND_IDENT = 47
 ND_EXP_LIST = 48
 ND_BARRIER = 49
-
+ND_U1 = 50
+ND_U2 = 51
+ND_SDG = 52
+ND_TDG = 53
+ND_CCX = 54
 # Dictionary for binary operator precedences
 binop_precedence = {
     ",": -1,
@@ -255,19 +259,12 @@ class Parser(Token):
         return node
     
     def expect(self, op):
-        # if self.token[self.token_idx][self.kind_idx] != token.TK_OPERATOR or self.token[self.token_idx][self.str_idx] != op:
-        #     Token.annotate_error(self.input_str, self.token[self.token_idx][self.idx_idx], "missing operator: " + op, self.token[self.token_idx][self.line_count_idx], self.token[self.token_idx][self.err_line_idx_idx])
-        # self.token_idx += 1
         if self.current_file.token[self.current_file.token_idx][self.kind_idx] != token.TK_OPERATOR or self.current_file.token[self.current_file.token_idx][self.str_idx] != op:
-            Token.annotate_error(self.current_file.name, self.current_file.file_str, self.current_file.token[self.current_file.token_idx][self.idx_idx], "missing operator: "\
-                + op, self.current_file.token[self.current_file.token_idx][self.line_count_idx], self.current_file.token[self.current_file.token_idx][self.err_line_idx_idx])
+            Token.annotate_error(self.current_file.name, self.current_file.file_str, self.current_file.token[self.current_file.token_idx-1][self.idx_idx], "missing operator: "\
+                + op, self.current_file.token[self.current_file.token_idx-1][self.line_count_idx], self.current_file.token[self.current_file.token_idx-1][self.err_line_idx_idx])
         self.current_file.token_idx += 1
         
     def consume_operator_str(self, op):
-        # if self.token[self.token_idx][self.kind_idx] != token.TK_OPERATOR or self.token[self.token_idx][self.str_idx] != op:
-        #     return False
-        # self.token_idx += 1
-        # return True
         if self.current_file.token[self.current_file.token_idx][self.kind_idx] != token.TK_OPERATOR or self.current_file.token[self.current_file.token_idx][self.str_idx] != op:
             return False
         self.current_file.token_idx += 1
@@ -862,9 +859,6 @@ class Parser(Token):
                 self.error_at(self.current_file.token_idx, "The second argument of "+name+" is missing")
             arg_idx = self.current_file.token_idx  
             argument_rhs = self.argument()
-            print(argument_rhs.qregs[0][0])
-            print(argument_rhs.qregs[0][1])
-            print(self.MULTI_CONTROL_QUBITS)
             targetname = argument_rhs.qregs[0][0]+f"[{argument_rhs.qregs[0][1]}]" if argument_rhs.qregs[0][1] != -1 else argument_rhs.qregs[0][0]
             if (targetname in self.MULTI_CONTROL_QUBITS) and (argument_rhs.qregs[0][1] == self.MULTI_CONTROL_QUBITS[targetname]):
                 self.error_at(arg_idx, "The control qubit of "+name+" cannot be the target qubit")
@@ -919,6 +913,14 @@ class Parser(Token):
         # Recursive descent parsing for 'U (explist) argument ;'
         if self.check_TK_kind(self.current_file.token_idx) == token.TK_U:
             node_uop = self.uop_with_explist_single(ND_U, "U")
+            return node_uop
+        # Recursive descent parsing for u1
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_U1:
+            node_uop = self.uop_with_explist_single(ND_U1, "U1")
+            return node_uop
+        # Recursive descent parsing for u2
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_U2:
+            node_uop = self.uop_with_explist_single(ND_U2, "U2")
             return node_uop
         # Recursive descent parsing for 'CX argument , argument ;'
         elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CX:
@@ -1003,6 +1005,34 @@ class Parser(Token):
         # Recursive descent parsing for 'CH argument, argument ;'
         elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CH:
             node_uop = self.uop_without_explist_controlled(ND_CH, "CH")
+            return node_uop
+        # Recursive descent parsing for idle gate
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_ID:
+            node_uop = self.uop_without_explist_single(-1, "ID")
+            return
+        # Recursive descent parsing for sdg gate
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_SDG:
+            node_uop = self.uop_without_explist_single(ND_SDG, "SDG")
+            return node_uop
+        # Recursive descent parsing for tdg gate
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_TDG:
+            node_uop = self.uop_without_explist_single(ND_TDG, "TDG")
+            return node_uop
+        # Recursive descent parsing for ccx gate
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CCX:
+            self.get_next_token()
+            # Check whether there are parameters
+            if self.check_operator_str(self.current_file.token_idx, "("):
+                self.error_at(self.current_file.token_idx, "The parameters of CCX are not allowed")
+            argument = self.idlist_qubit()
+            # Check whether the number of arguments is correct
+            if len(argument.qregs) != 3:
+                if len(argument.qregs) > 3:
+                    self.error_at(self.current_file.token_idx, "There should not be more than 2 control qubits for CCX")
+                else:
+                    self.error_at(self.current_file.token_idx, "There should not be less than 2 control qubits for CCX")
+            self.expect(";")
+            node_uop = Parser.create_node(ND_CCX, argument)
             return node_uop
         # Recursive descent parsing for 'id idlist ; | id () idlist ; | id (explist) idlist ;'
         elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
@@ -1369,6 +1399,8 @@ class Parser(Token):
     
     # Define the recursive function to generate the code for the node
     def code_gen(self, node, quantumcircuit):
+        if node is None:
+            return
         # return the val of the node if it is a number
         if node.kind == ND_NUM:
             return node.val
@@ -1497,6 +1529,39 @@ class Parser(Token):
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
             quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
+        # U1 gate
+        elif node.kind == ND_U1:
+            parameter = [0, 0]
+            parameter.extend(self.code_gen(node.left, quantumcircuit))
+            qubit = self.code_gen(node.right, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
+        
+        # U2 gate
+        elif node.kind == ND_U2:
+            parameter = [math.pi/2]
+            parameter.extend(self.code_gen(node.left, quantumcircuit))
+            qubit = self.code_gen(node.right, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
+        
+        # Sdg gate
+        elif node.kind == ND_SDG:
+            parameter = [0, 0, -math.pi/2]
+            qubit = self.code_gen(node.left, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
+        
+        # Tdg gate
+        elif node.kind == ND_TDG:
+            parameter = [0, 0, -math.pi/4]
+            qubit = self.code_gen(node.left, quantumcircuit)
+            qubit_name = qubit[0][0]
+            qubit_idx = qubit[0][1]
+            quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         
         # The following code is for the controlled gates without parameters
         # CX gate
@@ -1505,6 +1570,14 @@ class Parser(Token):
             target_qubit = self.code_gen(node.right, quantumcircuit)
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_no_parameter("cx", control_qubit, target_name, target_idx, self.IF_creg, self.IF_num, self.IF)
+        
+        # CCX gate
+        elif node.kind == ND_CCX:
+            qubits = self.code_gen(node.left, quantumcircuit)
+            control_qubit = qubits[0:2]
+            target_name = qubits[2][0]
+            target_idx = qubits[2][1]
             quantumcircuit.add_controlled_gate_no_parameter("cx", control_qubit, target_name, target_idx, self.IF_creg, self.IF_num, self.IF)
         # CY gate
         elif node.kind == ND_CY:
