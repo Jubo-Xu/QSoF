@@ -62,6 +62,8 @@ ND_U2 = 51
 ND_SDG = 52
 ND_TDG = 53
 ND_CCX = 54
+ND_OPAQUE_NOEXP = 55
+ND_OPAQUE_EXP = 56
 # Dictionary for binary operator precedences
 binop_precedence = {
     ",": -1,
@@ -178,10 +180,6 @@ class Filesystem:
 class Parser(Token):
     def __init__(self, filenode):
         super().__init__()
-        # self.token = TK
-        # self.node = None
-        # self.token_idx = 0
-        # self.input_str = file_str
         # Set up the Hash table for opaques, qregs, and cregs
         # For opaques, the key is the name of the opaque, and the element is a tuple of 
         self.opaques = {}
@@ -271,15 +269,12 @@ class Parser(Token):
         return True
     
     def check_TK_kind(self, idx):
-        # return self.token[idx][self.kind_idx]
         return self.current_file.token[idx][self.kind_idx]
 
     def check_operator_str(self, idx, str):
-        # return self.token[idx][self.kind_idx] == token.TK_OPERATOR and self.token[idx][self.str_idx] == str
         return self.current_file.token[idx][self.kind_idx] == token.TK_OPERATOR and self.current_file.token[idx][self.str_idx] == str
     
     def error_at(self, idx, message):
-        # Token.annotate_error("", self.input_str, self.token[idx][self.idx_idx], message, self.token[idx][self.line_count_idx], self.token[idx][self.err_line_idx_idx])
         Token.annotate_error(self.current_file.name, self.current_file.file_str, self.current_file.token[idx][self.idx_idx], message, self.current_file.token[idx][self.line_count_idx], self.current_file.token[idx][self.err_line_idx_idx])
     
     def check_num_error(self, name):
@@ -298,7 +293,6 @@ class Parser(Token):
     
     # Define the function for checking the included files if the gate declared is not defined in current file
     def check_include_files_current(self, filenode):
-        # filenode_ref_parent = filenode
         # should iterate through all the child files layer by layer
         for file in filenode.include_dict:
             # if the file is not tokenized, first tokenize it
@@ -315,8 +309,6 @@ class Parser(Token):
             self.current_file = filenode.include_dict[file]
             while (not self.GATE_FOUND) and (filenode.include_dict[file].token[filenode.include_dict[file].token_idx][self.kind_idx] != token.TK_EOF):
                 self.statement()
-            # reference back to the parent file
-            # self.current_file = filenode_ref_parent
             # if the gate is found, then return True
             if self.GATE_FOUND:
                 return True
@@ -438,6 +430,9 @@ class Parser(Token):
             # Check whether the opaque is already defined
             if self.current_file.token[self.current_file.token_idx+1][self.str_idx] in self.opaques:
                 self.error_at(self.current_file.token_idx+1, "opaque "+self.current_file.token[self.current_file.token_idx+1][self.str_idx]+" already defined")
+            # Check whether the opaque defined is supported by QSoF
+            if self.current_file.token[self.current_file.token_idx+1][self.str_idx] not in quantumcircuit.Opaque_Table:
+                self.error_at(self.current_file.token_idx+1, "opaque "+self.current_file.token[self.current_file.token_idx+1][self.str_idx]+" is not supported by QSoF")
             if self.check_operator_str(self.current_file.token_idx+2, "("):
                 # Recursive descent parsing for 'opaque id (idlist) idlist ;'
                 if self.check_TK_kind(self.current_file.token_idx+3) == token.TK_IDENT:
@@ -446,6 +441,13 @@ class Parser(Token):
                     opaque_instance = Opaque(name)
                     params = self.idlist_param()
                     opaque_instance.add_params(params)
+                    # Check whether the number of parameters is incorrect 
+                    if len(params) != quantumcircuit.Opaque_Table[name]:
+                        # Check whether the number of parameters is larger than the maximum number of parameters
+                        if len(params) > quantumcircuit.Opaque_Table[name]:
+                            self.error_at(self.current_file.token_idx-1, "The number of parameters exceeds the maximum number of parameters of opaque "+name)
+                        else:
+                            self.error_at(self.current_file.token_idx-1, "The number of parameters is less than the number of parameters required for opaque "+name)
                     self.expect(")")
                     args = self.idlist_qubit().qregs
                     opaque_instance.add_args(args)
@@ -457,8 +459,12 @@ class Parser(Token):
                     return node_stmt
                 # Recursive descent parsing for 'opaque id () idlist ;'
                 elif self.check_operator_str(self.current_file.token_idx+3, ")"):
-                    name = self.current_file.token[self.current_file.token_idx+1][self.str_idx]
-                    self.get_next_token(4)
+                    self.get_next_token()
+                    name = self.current_file.token[self.current_file.token_idx][self.str_idx]
+                    # Check whether the opaque should have parameters
+                    if quantumcircuit.Opaque_Table[name] != 0:
+                        self.error_at(self.current_file.token_idx+2, "The number of parameters should be "+str(quantumcircuit.Opaque_Table[name]))
+                    self.get_next_token(3)
                     opaque_instance = Opaque(name)
                     args = self.idlist_qubit().qregs
                     opaque_instance.add_args(args)
@@ -472,8 +478,12 @@ class Parser(Token):
                     self.error_at(self.current_file.token_idx+3, "The parameters could only be identifiers or empty")
             # Recursive descent parsing for 'opaque id idlist ;'
             elif self.check_TK_kind(self.current_file.token_idx+2) == token.TK_IDENT:
-                name = self.current_file.token[self.current_file.token_idx+1][self.str_idx]
-                self.get_next_token(3)
+                self.get_next_token()
+                name = self.current_file.token[self.current_file.token_idx][self.str_idx]
+                # Check whether the opaque should have parameters
+                if quantumcircuit.Opaque_Table[name] != 0:
+                    self.error_at(self.current_file.token_idx, "The number of parameters should be "+str(quantumcircuit.Opaque_Table[name]))
+                self.get_next_token(2)
                 opaque_instance = Opaque(name)
                 args = self.idlist_qubit().qregs
                 opaque_instance.add_args(args)
@@ -520,7 +530,6 @@ class Parser(Token):
                 self.error_at(self.current_file.token_idx, "The condition cannot be empty")
             else:
                 self.error_at(self.current_file.token_idx, "The condition cannot be this type")
-        # condition_lhs = self.create_node_creg((self.token[self.token_idx][self.str_idx], -1))
         condition_lhs = self.argument_c()
         # Check whether the size of the creg is 1 if it's not indexed
         if condition_lhs.cregs[0][1] == -1:
@@ -1040,10 +1049,14 @@ class Parser(Token):
             # Check whether the gate is a gate declare or an opaque declare
             Gate_declare_pre = self.GATE_declare
             Opaque_declare_pre = self.OPAQUE_declare
+            ND_NOEXP_type = ND_GATE_NOEXP
+            ND_EXP_type = ND_GATE_EXP
             if name in self.gates:
                 self.GATE_declare = True
             elif name in self.opaques:
                 self.OPAQUE_declare = True
+                ND_NOEXP_type = ND_OPAQUE_NOEXP
+                ND_EXP_type = ND_OPAQUE_EXP
             else:
                 gate_found_pre = self.GATE_FOUND
                 gate_name_find_pre = self.gate_name_find
@@ -1075,7 +1088,7 @@ class Parser(Token):
                             self.error_at(self.current_file.token_idx, "The arguments cannot be this type")
                     args = self.idlist_qubit()
                     self.expect(";")
-                    node_uop = Parser.create_node(ND_GATE_NOEXP, args)
+                    node_uop = Parser.create_node(ND_NOEXP_type, args)
                     # Add the gate name to the node for later circuit generation
                     node_uop.add_str(name)
                     # Flip the GATE_declare flag to change the current state back to normal
@@ -1097,7 +1110,7 @@ class Parser(Token):
                             self.error_at(self.current_file.token_idx, "The arguments cannot be this type")
                     args = self.idlist_qubit()
                     self.expect(";")
-                    node_uop = Parser.create_node(ND_GATE_EXP, explist, args)
+                    node_uop = Parser.create_node(ND_EXP_type, explist, args)
                     # Add the gate name to the node for later circuit generation
                     node_uop.add_str(name)
                     # Flip the GATE_declare flag to change the current state back to normal
@@ -1111,7 +1124,7 @@ class Parser(Token):
             elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
                 args = self.idlist_qubit()
                 self.expect(";")
-                node_uop = Parser.create_node(ND_GATE_NOEXP, args)
+                node_uop = Parser.create_node(ND_NOEXP_type, args)
                 node_uop.add_str(name)
                 # Flip the GATE_declare flag to change the current state back to normal
                 # self.GATE_declare = False
@@ -1448,6 +1461,9 @@ class Parser(Token):
         # if the node is a gate declare node, skip it
         elif node.kind == ND_GATE_DEC:
             return
+        # if the node is a opaque declare node, skip it
+        elif node.kind == ND_OPAQUE:
+            return
         #### the following code is for the single qubit gates without parameters ####
         # X gate
         elif node.kind == ND_X:
@@ -1698,6 +1714,24 @@ class Parser(Token):
             self.GATE_DEF_name = Gate_def_name_original
             return
         
+        ## The following code is for the opaque definition
+        # Gate definition without parameters
+        elif node.kind == ND_OPAQUE_NOEXP:
+            opaque_name = node.str
+            arguments = self.code_gen(node.left, quantumcircuit)
+            # call the function to add the opaque gate to the quantum circuit\
+            quantumcircuit.add_opaque(opaque_name, arguments, [], self.IF_creg, self.IF_num, self.IF)
+            return
+        
+        # Gate definition with parameters
+        elif node.kind == ND_OPAQUE_EXP:
+            opaque_name = node.str
+            explist = self.code_gen(node.left, quantumcircuit)
+            arguments = self.code_gen(node.right, quantumcircuit)
+            # call the function to add the opaque gate to the quantum circuit
+            quantumcircuit.add_opaque(opaque_name, arguments, explist, self.IF_creg, self.IF_num, self.IF)
+            return
+        
         ## The following code is for the measurement
         elif node.kind == ND_MEASURE:
             qregs = self.code_gen(node.left, quantumcircuit)
@@ -1845,9 +1879,3 @@ class Parser(Token):
 filepath = "qsofinstr/check2.qasm"
 QC = Parser.compile(filepath)
 QC.test_draw()    
-
-    
-    
-    
-    
-    

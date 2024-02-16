@@ -6,6 +6,9 @@ gate XRX (param1) a, b{
     RX(param1) b;
 }
 
+opaque mixamp(param1) a;
+opaque mixphase(param1) a;
+
 Y q[0];
 Z q[1];
 H q[2];
@@ -25,5 +28,7 @@ u2(1, 2) q[3];
 sdg q[3];
 tdg q[3];
 ccx q[0], q[2], q[3];
+mixamp(1) q[0];
+mixphase(2) q[1];
 
 

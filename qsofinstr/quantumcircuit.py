@@ -25,6 +25,12 @@ Param_Num_Table = {
     "U2": 2
 }
 
+# The table for current supported opaques in QSoF
+Opaque_Table = {
+    "mixamp": 1,
+    "mixphase": 1
+}
+
 class Time_slice_node:
     def __init__(self, gate_operation):
         self.gate_operation = gate_operation
@@ -321,6 +327,44 @@ class Quantum_circuit:
             # Add the new timeslice node to the circuit
             self.qubits[qubit_names[i]][f"timeslice_{max_time_slice}"] = time_slice_node
             # Set the maximum timeslice index for the circuit
+        self.max_time_slice = max(self.max_time_slice, max_time_slice)
+    
+    # Add the opaque operation to the circuit  
+    def add_opaque(self, opaque_name, qubits, parameter, if_creg=None, if_num=0, if_flag=False):
+        # Set up the condition variables
+        if_creg_name = ""
+        if_creg_num = 0
+        if if_flag:
+            if_creg_name = if_creg[0] + f"[{if_creg[1]}]" if if_creg[1] != -1 else if_creg[0]
+            if_creg_num = if_num
+        qubit_names = [qubits[0][0] + f"[{qubits[0][1]}]" if qubits[0][1] != -1 else qubits[0][0]]
+        # add the control qubit to the list and find the maximum timeslice index
+        max_time_slice = self.qubit_max_time_slice[qubit_names[0]]
+        for i in range(1, len(qubits)):
+            qubit_name = qubits[i][0]+f"[{qubits[i][1]}]" if qubits[i][1] != -1 else qubits[i][0]
+            qubit_names.append(qubit_name)
+            if self.qubit_max_time_slice[qubit_name] > max_time_slice:
+                max_time_slice = self.qubit_max_time_slice[qubit_name]
+        # Add 1 to the maximum timeslice index to get the current timeslice index
+        max_time_slice += 1
+        # Loop through all the qubits in the list and add the new timeslice node to the circuit with the current timeslice index
+        for i in range(len(qubit_names)):
+            qubit = qubit_names[i]
+            self.qubit_max_time_slice[qubit] = max_time_slice
+            time_slice_node_opaque = Time_slice_node(opaque_name)
+            if parameter:
+                time_slice_node_opaque.with_parameter = True
+                time_slice_node_opaque.add_parameter(parameter) 
+            time_slice_node_opaque.time_slice_index = max_time_slice
+            time_slice_node_opaque.add_connected_qubit(qubit_names[0:i])
+            time_slice_node_opaque.add_connected_qubit(qubit_names[i+1:])
+            # Add the conditioned variables to the control timeslice node
+            if if_flag:
+                time_slice_node_opaque.if_flag = True
+                time_slice_node_opaque.if_num = if_creg_num
+                time_slice_node_opaque.if_creg = if_creg_name
+            self.qubits[qubit][f"timeslice_{max_time_slice}"] = time_slice_node_opaque
+        # Update the maximum timeslice index of the circuit
         self.max_time_slice = max(self.max_time_slice, max_time_slice)
         
     
