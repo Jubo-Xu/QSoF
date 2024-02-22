@@ -49,6 +49,7 @@ TK_ID = 43
 TK_SDG = 44
 TK_TDG = 45
 TK_CCX = 46
+TK_CU1 = 47
 
 
 class Token(object):
@@ -229,7 +230,7 @@ class Token(object):
             
             # Check for pi
             if TK.qasm_str[i] == "p" and TK.qasm_str[i+1] == "i":
-                if TK.qasm_str[i+2] == "," or TK.qasm_str[i+2] == ")" or TK.qasm_str[i+2].isspace():
+                if not TK.is_alnum(TK.qasm_str[i+2]):
                     TK.Token.append((TK_PI, 0, 0, 2, "pi", TK.line_count, TK.err_line_idx, i))
                     i += 2
                     continue
@@ -423,13 +424,6 @@ class Token(object):
                     i += 6
                     continue
             
-            # Check for cu1
-            if TK.qasm_str[i] == "c" and TK.qasm_str[i+1] == "u" and TK.qasm_str[i+2] == "1":
-                if TK.qasm_str[i+3] == "(" or TK.qasm_str[i+3].isspace():
-                    TK.Token.append((TK_RTHETA, 0, 0, 6, "RTHETA", TK.line_count, TK.err_line_idx, i))
-                    i += 3
-                    continue
-
             # Check for RX
             if (TK.qasm_str[i] == "R" and TK.qasm_str[i+1] == "X") or (TK.qasm_str[i]=="r" and TK.qasm_str[i+1]=="x"):
                 if TK.qasm_str[i+2] == "(" or TK.qasm_str[i+2].isspace():
@@ -497,6 +491,13 @@ class Token(object):
             if TK.qasm_str[i] == "c" and TK.qasm_str[i+1] == "u" and TK.qasm_str[i+2] == "3":
                 if TK.qasm_str[i+3] == "(" or TK.qasm_str[i+3].isspace():
                     TK.Token.append((TK_CU, 0, 0, 2, "CU", TK.line_count, TK.err_line_idx, i))
+                    i += 3
+                    continue
+            
+            # Check for cu1
+            if TK.qasm_str[i] == "c" and TK.qasm_str[i+1] == "u" and TK.qasm_str[i+2] == "1":
+                if TK.qasm_str[i+3] == "(" or TK.qasm_str[i+3].isspace():
+                    TK.Token.append((TK_CU1, 0, 0, 3, "CU1", TK.line_count, TK.err_line_idx, i))
                     i += 3
                     continue
             

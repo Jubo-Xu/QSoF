@@ -64,6 +64,7 @@ ND_TDG = 53
 ND_CCX = 54
 ND_OPAQUE_NOEXP = 55
 ND_OPAQUE_EXP = 56
+ND_CU1 = 57
 # Dictionary for binary operator precedences
 binop_precedence = {
     ",": -1,
@@ -217,6 +218,8 @@ class Parser(Token):
         self.GATE_FOUND = True # The flag to indicate whether the gate is found
         # The dictionary for the multi-controlled qubits, where the key is the qubit name, and the element is the index of the qubit
         self.MULTI_CONTROL_QUBITS = {}
+        # The flag to indicate whether the current parsing gate is a single qubit gate(mainly for the cases like H q; where q has size larger than 1)
+        self.SINGLE_QUBIT_GATE = False
         
         
     @staticmethod
@@ -757,7 +760,8 @@ class Parser(Token):
         else:
             # Check if the qreg is not indexed then it should be a qubit instead of a register
             if (not self.GATE_define) and (self.qregs[name] != 1) and (not self.MEASURE) and (not self.RESET):
-                self.error_at(self.current_file.token_idx, "The qreg "+name+" should be indexed")
+                if not self.SINGLE_QUBIT_GATE:
+                    self.error_at(self.current_file.token_idx, "The qreg "+name+" should be indexed")
             node_argument = Parser.create_node_qreg((name, -1))
             return node_argument
     
@@ -821,6 +825,7 @@ class Parser(Token):
         self.get_next_token()
         # Set the current gate name
         self.GATE_name_support = name
+        self.SINGLE_QUBIT_GATE = True
         self.expect("(")
         # Check whether the explist is missing
         if self.check_operator_str(self.current_file.token_idx, ")"):
@@ -833,16 +838,19 @@ class Parser(Token):
         argument = self.argument()
         self.expect(";")
         node_uop = Parser.create_node(kind, explist, argument)
+        self.SINGLE_QUBIT_GATE = False
         return node_uop
     
     def uop_without_explist_single(self, kind, name):
         self.get_next_token()
+        self.SINGLE_QUBIT_GATE = True
         # Check whether the argument is missing
         if self.check_operator_str(self.current_file.token_idx, ";"):
             self.error_at(self.current_file.token_idx, "The argument of"+name+"is missing")
         argument = self.argument()
         self.expect(";")
         node_uop = Parser.create_node(kind, argument)
+        self.SINGLE_QUBIT_GATE = False
         return node_uop
     
     def uop_without_explist_controlled(self, kind, name):
@@ -986,6 +994,10 @@ class Parser(Token):
         # Recursive descent parsing for 'CU (explist) argument, argument ;'
         elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CU:
             node_uop = self.uop_with_explist_controlled(ND_CU, "CU")
+            return node_uop
+        # Recursive descent parsing for 'CU1 (explist) argument, argument ;'
+        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CU1:
+            node_uop = self.uop_with_explist_controlled(ND_CU1, "CU1")
             return node_uop
         # Recursive descent parsing for 'CS argument, argument ;'
         elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CS:
@@ -1424,7 +1436,8 @@ class Parser(Token):
             return parameter_val
         # return the pi if it is a pi node
         elif node.kind == ND_PI:
-            return math.pi
+            # return math.pi
+            return 3.14
         # qubits added to circuit if ND_QREG_DEC is encountered
         elif node.kind == ND_QREG_DEC:
             qubit_name = node.str
@@ -1470,36 +1483,78 @@ class Parser(Token):
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_no_parameter("x", qubit_name, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_no_parameter("x", qubit_name, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # Y gate
         elif node.kind == ND_Y:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_no_parameter("y", qubit_name, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_no_parameter("y", qubit_name, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # Z gate
         elif node.kind == ND_Z:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_no_parameter("z", qubit_name, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_no_parameter("z", qubit_name, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # S gate
         elif node.kind == ND_S:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_no_parameter("s", qubit_name, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_no_parameter("s", qubit_name, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # T gate
         elif node.kind == ND_T:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_no_parameter("t", qubit_name, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_no_parameter("t", qubit_name, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # H gate
         elif node.kind == ND_H:
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_no_parameter("h", qubit_name, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_no_parameter("h", qubit_name, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         
         ### The following code is for the single qubit gates with parameters ###
@@ -1516,6 +1571,13 @@ class Parser(Token):
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_with_parameter("rx", qubit_name, parameter, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_with_parameter("rx", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # RY gate
         elif node.kind == ND_RY:
@@ -1523,6 +1585,13 @@ class Parser(Token):
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_with_parameter("ry", qubit_name, parameter, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_with_parameter("ry", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # RZ gate
         elif node.kind == ND_RZ:
@@ -1530,6 +1599,13 @@ class Parser(Token):
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_with_parameter("rz", qubit_name, parameter, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_with_parameter("rz", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # RTHETA gate
         elif node.kind == ND_RTHETA:
@@ -1537,6 +1613,13 @@ class Parser(Token):
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_with_parameter("rtheta", qubit_name, parameter, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_with_parameter("rtheta", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # U gate
         elif node.kind == ND_U:
@@ -1544,6 +1627,13 @@ class Parser(Token):
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         # U1 gate
         elif node.kind == ND_U1:
@@ -1552,6 +1642,13 @@ class Parser(Token):
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         
         # U2 gate
@@ -1561,6 +1658,13 @@ class Parser(Token):
             qubit = self.code_gen(node.right, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         
         # Sdg gate
@@ -1569,6 +1673,13 @@ class Parser(Token):
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         
         # Tdg gate
@@ -1577,6 +1688,13 @@ class Parser(Token):
             qubit = self.code_gen(node.left, quantumcircuit)
             qubit_name = qubit[0][0]
             qubit_idx = qubit[0][1]
+            # If the qubit is not indexed and the size of qreg is not 1, loop through all the qubits
+            if qubit_idx == -1:
+                if self.qregs[qubit_name] != 1:
+                    # loop through all the qubits 
+                    for i in range(self.qregs[qubit_name]):
+                        quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, i, self.IF_creg, self.IF_num, self.IF)
+                    return
             quantumcircuit.add_single_qubit_gate_with_parameter("u", qubit_name, parameter, qubit_idx, self.IF_creg, self.IF_num, self.IF)
         
         # The following code is for the controlled gates without parameters
@@ -1667,7 +1785,15 @@ class Parser(Token):
             target_name = target_qubit[0][0]
             target_idx = target_qubit[0][1]
             quantumcircuit.add_controlled_gate_with_parameter("cu", control_qubit, target_name, parameter, target_idx, self.IF_creg, self.IF_num, self.IF)
-        
+        # CU1 gate
+        elif node.kind == ND_CU1:
+            parameter = [0, 0]
+            parameter.extend(self.code_gen(node.left, quantumcircuit))
+            control_qubit, target_qubit = self.code_gen(node.right, quantumcircuit)
+            target_name = target_qubit[0][0]
+            target_idx = target_qubit[0][1]
+            quantumcircuit.add_controlled_gate_with_parameter("cu1", control_qubit, target_name, parameter, target_idx, self.IF_creg, self.IF_num, self.IF)
+            
         ## The following code is for the gate definition
         # Gate definition without parameters
         elif node.kind == ND_GATE_NOEXP:
@@ -1768,6 +1894,7 @@ class Parser(Token):
             # Add the reset to the quantum circuit
             quantumcircuit.add_reset(qregs, self.IF_creg, self.IF_num, self.IF)
             return
+        
         ## The following code is for the barrier
         elif node.kind == ND_BARRIER:
             qregs = self.code_gen(node.left, quantumcircuit)
@@ -1876,6 +2003,7 @@ class Parser(Token):
         QC = parser.circuit_gen()
         return QC
     
-filepath = "qsofinstr/check2.qasm"
+filepath = "qsofinstr/test_instruction.qasm"
 QC = Parser.compile(filepath)
 QC.test_draw()    
+QC.test_instruction()
