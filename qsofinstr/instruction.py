@@ -17,7 +17,7 @@ class timeslice_instruction_node:
             "single_gate_condition": True,
             "control_gate_no_condition": [True, True], # The first element is for single control qubit, and the second element is for multiple control qubits
             "control_gate_condition": [True, True], # The first element is for single control qubit, and the second element is for multiple control qubits
-            "decoherence": True,
+            "decoherence": True, 
             "measurement": True,
             "reset": True
         }
@@ -28,7 +28,7 @@ class timeslice_instruction_node:
             "single_gate_condition": -1,
             "control_gate_no_condition": [-1, -1], # The first element is for single control qubit, and the second element is for multiple control qubits
             "control_gate_condition": [-1, -1], # The first element is for single control qubit, and the second element is for multiple control qubits
-            "decoherence": -1,
+            "decoherence": [-1, -1], # The first element is for decoherence instruction, and the second is for the parameter
             "measurement": -1,
             "reset": -1
         }
@@ -38,7 +38,7 @@ class timeslice_instruction_node:
             "single_gate_condition": N_instr_bits,
             "control_gate_no_condition": [N_instr_bits, N_instr_bits], # The first element is for single control qubit, and the second element is for multiple control qubits
             "control_gate_condition": [N_instr_bits, N_instr_bits], # The first element is for single control qubit, and the second element is for multiple control qubits
-            "decoherence": N_instr_bits,
+            "decoherence": [N_instr_bits, 0], # The first element is for decoherence instruction, and the second is for the parameter
             "measurement": N_instr_bits,
             "reset": N_instr_bits
         }
@@ -94,8 +94,14 @@ class Instructions:
             "crz": 9,
             "crtheta": 10
         }
+        # The table of the decoherence operations
+        self.decoherence = {
+            "mixamp": 0,
+            "mixphase":1
+        }
         self.operand_length = 3 # The number of bits for each operand
         self.gate_length = 4 # The number of bits needed to represent the gate
+        self.decoherence_length = 1 # The number of bits needed to represent the decoherence
     
     @staticmethod
     def float_to_fixed_point(value, bits_float):
@@ -267,24 +273,20 @@ class Instructions:
                     self.instructions[timeslice].instructions["control_gate_no_condition"][idx][self.instructions[timeslice].instruction_index["control_gate_no_condition"][idx]] += (1 << (self.N_instr_bits-1))
             return
         instruction = 0
-        # Check whether a new instruction should be generated for the current timeslice for single control qubit
-        if self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][0]:
-            self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][0] = False
-            self.instructions[timeslice].instruction_index["control_gate_no_condition"][0] += 1
-            self.instructions[timeslice].bit_position["control_gate_no_condition"][0] = self.N_instr_bits-1-self.operand_length
-            self.instructions[timeslice].instructions["control_gate_no_condition"][0].append(instruction+(self.quantum_operation_operands["control_gate_no_condition"]<<(self.N_instr_bits-1-self.operand_length)))
-            self.instructions[timeslice].bit_position["control_gate_no_condition"][0] -= 1
-        # Check whether a new instruction should be generated for the current timeslice for multiple control qubits
-        if self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][1]:
-            self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][1] = False
-            self.instructions[timeslice].instruction_index["control_gate_no_condition"][1] += 1
-            self.instructions[timeslice].bit_position["control_gate_no_condition"][1] = self.N_instr_bits-1-self.operand_length
-            self.instructions[timeslice].instructions["control_gate_no_condition"][1].append(instruction+(self.quantum_operation_operands["control_gate_no_condition"]<<(self.N_instr_bits-1-self.operand_length)))
-            self.instructions[timeslice].bit_position["control_gate_no_condition"][1] -= 1
-            self.instructions[timeslice].instructions["control_gate_no_condition"][1][self.instructions[timeslice].instruction_index["control_gate_no_condition"][1]] += (1 << self.instructions[timeslice].bit_position["control_gate_no_condition"][1])
+        idx = 0 if len(control_qubits) == 1 else 1
+        # Check whether a new instruction should be generated for the current timeslice for single control qubit or multiple control qubits
+        if self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][idx]:
+            self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][idx] = False
+            self.instructions[timeslice].instruction_index["control_gate_no_condition"][idx] += 1
+            self.instructions[timeslice].bit_position["control_gate_no_condition"][idx] = self.N_instr_bits-1-self.operand_length
+            self.instructions[timeslice].instructions["control_gate_no_condition"][idx].append(instruction+(self.quantum_operation_operands["control_gate_no_condition"]<<(self.N_instr_bits-1-self.operand_length)))
+            self.instructions[timeslice].bit_position["control_gate_no_condition"][idx] -= 1
+            # Set bit 60 to 1 only for multiple control qubits
+            if idx == 1:
+                self.instructions[timeslice].instructions["control_gate_no_condition"][1][self.instructions[timeslice].instruction_index["control_gate_no_condition"][1]] += (1 << self.instructions[timeslice].bit_position["control_gate_no_condition"][1])
         
         # Set the control qubits and target qubits operand for both single control qubit and multiple control qubits
-        if len(control_qubits) == 1:
+        if idx == 0:
             # Add the control qubit to the instruction
             self.instructions[timeslice].bit_position["control_gate_no_condition"][0] -= self.N_qubit_bits
             instruction += (control_qubits[0] << self.instructions[timeslice].bit_position["control_gate_no_condition"][0])
@@ -295,7 +297,6 @@ class Instructions:
             # Set the bit position 
             self.instructions[timeslice].bit_position["control_gate_no_condition"][1] -= self.N
         # Add the target qubit to the instruction
-        idx = 0 if len(control_qubits) == 1 else 1
         self.instructions[timeslice].bit_position["control_gate_no_condition"][idx] -= self.N_qubit_bits
         instruction += (target_qubit << self.instructions[timeslice].bit_position["control_gate_no_condition"][idx])
         # Add the gate to the instruction
@@ -352,21 +353,15 @@ class Instructions:
                     self.instructions[timeslice].instructions["control_gate_condition"][idx][self.instructions[timeslice].instruction_index["control_gate_condition"][idx]] += (1 << (self.N_instr_bits-1))
             return
         instruction = 0
-        # Check whether a new instruction should be generated for the current timeslice for single control qubit
-        if self.instructions[timeslice].new_instruction_need["control_gate_condition"][0]:
-            self.instructions[timeslice].new_instruction_need["control_gate_condition"][0] = False
-            self.instructions[timeslice].instruction_index["control_gate_condition"][0] += 1
-            self.instructions[timeslice].bit_position["control_gate_condition"][0] = self.N_instr_bits-1-self.operand_length
-            self.instructions[timeslice].instructions["control_gate_condition"][0].append(instruction+(self.quantum_operation_operands["control_gate_condition"]<<(self.N_instr_bits-1-self.operand_length)))
-            self.instructions[timeslice].bit_position["control_gate_condition"][0] -= 1
-        # Check whether a new instruction should be generated for the current timeslice for multiple control qubits
-        if self.instructions[timeslice].new_instruction_need["control_gate_condition"][1]:
-            self.instructions[timeslice].new_instruction_need["control_gate_condition"][1] = False
-            self.instructions[timeslice].instruction_index["control_gate_condition"][1] += 1
-            self.instructions[timeslice].bit_position["control_gate_condition"][1] = self.N_instr_bits-1-self.operand_length
-            self.instructions[timeslice].instructions["control_gate_condition"][1].append(instruction+(self.quantum_operation_operands["control_gate_condition"]<<(self.N_instr_bits-1-self.operand_length)))
-            self.instructions[timeslice].bit_position["control_gate_condition"][1] -= 1
-            self.instructions[timeslice].instructions["control_gate_condition"][1][self.instructions[timeslice].instruction_index["control_gate_condition"][1]] += (1 << self.instructions[timeslice].bit_position["control_gate_condition"][1])
+        idx = 0 if len(control_qubits) == 1 else 1
+        if self.instructions[timeslice].new_instruction_need["control_gate_condition"][idx]:
+            self.instructions[timeslice].new_instruction_need["control_gate_condition"][idx] = False
+            self.instructions[timeslice].instruction_index["control_gate_condition"][idx] += 1
+            self.instructions[timeslice].bit_position["control_gate_condition"][idx] = self.N_instr_bits-1-self.operand_length
+            self.instructions[timeslice].instructions["control_gate_condition"][idx].append(instruction+(self.quantum_operation_operands["control_gate_condition"]<<(self.N_instr_bits-1-self.operand_length)))
+            self.instructions[timeslice].bit_position["control_gate_condition"][idx] -= 1
+            if idx == 1:
+                self.instructions[timeslice].instructions["control_gate_condition"][1][self.instructions[timeslice].instruction_index["control_gate_condition"][1]] += (1 << self.instructions[timeslice].bit_position["control_gate_condition"][1])
         
         # Set the control qubits and target qubits operand for both single control qubit and multiple control qubits
         if len(control_qubits) == 1:
@@ -380,7 +375,6 @@ class Instructions:
             # Set the bit position 
             self.instructions[timeslice].bit_position["control_gate_condition"][1] -= self.N
         # Add the target qubit to the instruction
-        idx = 0 if len(control_qubits) == 1 else 1
         self.instructions[timeslice].bit_position["control_gate_condition"][idx] -= self.N_qubit_bits
         instruction += (target_qubit << self.instructions[timeslice].bit_position["control_gate_condition"][idx])
         # Add the gate to the instruction
@@ -418,7 +412,100 @@ class Instructions:
         self.instructions[timeslice].instructions["control_gate_condition"][idx][self.instructions[timeslice].instruction_index["control_gate_condition"][idx]] += instruction
         # Set the last operation to the current operation
         self.instructions[timeslice].Operation_last = "control_gate_condition"
-
+    
+    ## Define the instruction generation function of decoherence
+    # The format of the instruction for decoherence is as follows:
+    # |64|63|62|61|---A---|a|..............................|
+    # 1. bit 64 is used to indicate whether the current instruction is the last instruction in the timeslice
+    # 2. bit |63|63|62| is the quantum operation operand for the decoherence, which should be 100
+    # 3. A represents which qubit is under the operation, which needs ceil(log2(N)) bits
+    # 4. |a| is the operation operand, which needs 1 bit
+    # The format of parameters for decoherence is as follows:
+    # |-------------A------------|------------B------------|
+    # 1. The probabilities need 32 bits to represent, therefore a 64 bits instruction can represent two probabilities
+    # 2. The methodology of appending the parameters is as follows:
+    #   a. The parameter is appended to the instruction in the same order as the decoherence operation, 
+    #      for example, if decoherence operation is first applied on qubit 0, and then on qubit 1, then A 
+    #      represents the probability of qubit 0, and B represents the probability of qubit 1
+    #   b. The parameters will be appended following the decoherence instruction, for example, if there are 8 decoherences
+    #      represented by one instruction, then there should be 4 64-bit parameter instructions following this decoherece instruction
+    #   c. There's a case where the total number of decoherence operations is odd, then all the bits of last B will be set to 1
+    def add_instruction_decoherence(self, timeslice, qubit, decoherence, prob, end_of_timeslice = False):
+        # Check whether the instruction should be ended
+        if end_of_timeslice and (qubit is None) and (decoherence is None) and (prob is None):
+            if (len(self.instructions[timeslice].instructions["decoherence"]) > 0):
+                self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][0]] += (1 << self.instructions[timeslice].bit_position["decoherence"][0]) - 1
+                # Set the remaining bits of parameter instruction to 1 if there are remaining bits
+                if self.instructions[timeslice].bit_position["decoherence"][1] > 0:
+                    self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][1]] += (1 << self.instructions[timeslice].bit_position["decoherence"][1]) - 1
+                # Set the most significant bit to 1 if the last instruction being added is decoherence
+                if self.instructions[timeslice].Operation_last == "decoherence":
+                    self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][0]] += (1 << (self.N_instr_bits-1))
+                self.instructions[timeslice].new_instruction_need["decoherence"] = True
+            return
+        instruction = 0
+        # Check whether a new instruction should be generated for the current timeslice
+        if self.instructions[timeslice].new_instruction_need["decoherence"]:
+            self.instructions[timeslice].new_instruction_need["decoherence"] = False
+            # Set the index of decoherence instruction to the next position of the last parameter instruction
+            self.instructions[timeslice].instruction_index["decoherence"][0] = self.instructions[timeslice].instruction_index["decoherence"][1]+1
+            self.instructions[timeslice].bit_position["decoherence"][0] = self.N_instr_bits-1-self.operand_length
+            self.instructions[timeslice].instructions["decoherence"].append(instruction+(self.quantum_operation_operands["decoherence"]<<(self.N_instr_bits-1-self.operand_length)))
+            # Set the remaining bits of the last parameter instruction to 1 if there are remaining bits
+            if self.instructions[timeslice].bit_position["decoherence"][1] > 0:
+                self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][1]] += (1 << self.instructions[timeslice].bit_position["decoherence"][1]) - 1
+            # Add the new empty parameter instruction
+            self.instructions[timeslice].instruction_index["decoherence"][1] += 2
+            self.instructions[timeslice].instructions["decoherence"].append(instruction)
+            # Set the bit position of the new parameter instruction
+            self.instructions[timeslice].bit_position["decoherence"][1] = self.N_instr_bits
+            
+        # Add the qubit to the instruction
+        self.instructions[timeslice].bit_position["decoherence"][0] -= self.N_qubit_bits
+        instruction += (qubit << self.instructions[timeslice].bit_position["decoherence"][0])
+        # Add the decoherence to the instruction
+        self.instructions[timeslice].bit_position["decoherence"][0] -= self.decoherence_length
+        instruction += (self.decoherence[decoherence] << self.instructions[timeslice].bit_position["decoherence"][0])
+        # Add the probability
+        prob_fixed = Instructions.float_to_fixed_point(prob[0], self.Bits_Float)
+        if self.instructions[timeslice].bit_position["decoherence"][1] > 0:
+            # Add the probability to the existing parameter instruction if there are remaining bits for that instruction
+            self.instructions[timeslice].bit_position["decoherence"][1] -= (self.Bits_Int+self.Bits_Float)
+            self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][1]]\
+                += (prob_fixed << (self.instructions[timeslice].bit_position["decoherence"][1]))
+        else:
+            # Add the probability to a new parameter instruction
+            # Set the bit position of the new parameter instruction
+            self.instructions[timeslice].bit_position["decoherence"][1] = self.N_instr_bits-(self.Bits_Int+self.Bits_Float)
+            # Add the probability to the new parameter instruction
+            self.instructions[timeslice].instructions["decoherence"].append(prob_fixed << self.instructions[timeslice].bit_position["decoherence"][1])
+            # Set the instruction index of the parameter
+            self.instructions[timeslice].instruction_index["decoherence"][1] += 1
+        
+        # Check whether the remaining bits is not enough for another decoherence
+        if self.instructions[timeslice].bit_position["decoherence"][0] < (self.N_qubit_bits+self.decoherence_length):
+            self.instructions[timeslice].new_instruction_need["decoherence"] = True
+            # Invert the remaining bits to 1
+            instruction += (1 << self.instructions[timeslice].bit_position["decoherence"][0]) - 1
+            self.instructions[timeslice].bit_position["decoherence"][0] = self.N_instr_bits
+        # If the current gate is last operation in current timeslice, then set the most significant bit to 1 and set the remaining bits to 1
+        if end_of_timeslice:
+            # Invert the remaining bits to 1 if they haven't been inverted
+            if not self.instructions[timeslice].new_instruction_need["decoherence"]:
+                instruction += (1 << self.instructions[timeslice].bit_position["decoherence"][0]) - 1
+            instruction += (1 << (self.N_instr_bits-1))
+            self.instructions[timeslice].new_instruction_need["decoherence"] = True
+            # Set the remaining bits of parameter instruction to 1 if there are remaining bits
+            if self.instructions[timeslice].bit_position["decoherence"][1] > 0:
+                self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][1]]\
+                    += (1 << self.instructions[timeslice].bit_position["decoherence"][1]) - 1
+        # Update the instruction
+        self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][0]] += instruction
+        # Set the last operation to the current operation
+        self.instructions[timeslice].Operation_last = "decoherence"
+    
+    
+        
     def instruction_gen_timeslice(self, timeslice, qubit, timeslice_node, end_of_timeslice, quantumcircuit):
         # Check whether the instruction node exists for the current timeslice
         if timeslice not in self.instructions:
@@ -426,11 +513,22 @@ class Instructions:
         # Check whether the current gate operation is a single qubit gate without condition
         if (timeslice_node.gate_operation in self.single_qubit_gates) and (not timeslice_node.if_flag):
             self.add_instruction_single_gate_no_condition(timeslice, timeslice_node.gate_operation, qubit, end_of_timeslice, timeslice_node.parameters)
+            # If the current qubit is the last qubit, then to make sure the remaining bits of the instructions for all other operations are set to 1
+            if end_of_timeslice:
+                self.add_instruction_single_gate_condition(timeslice, None, None, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_no_condition(timeslice, None, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_condition(timeslice, None, None, None, None, None, end_of_timeslice, None)
+                self.add_instruction_decoherence(timeslice, None, None, None, end_of_timeslice)
             return
         # Check whether the current gate operation is a single qubit gate with condition
         elif (timeslice_node.gate_operation in self.single_qubit_gates) and (timeslice_node.if_flag):
             self.add_instruction_single_gate_condition(timeslice, timeslice_node.gate_operation, qubit, quantumcircuit.cregs_idx[timeslice_node.if_creg], \
                 timeslice_node.if_num, end_of_timeslice, timeslice_node.parameters)
+            if end_of_timeslice:
+                self.add_instruction_single_gate_no_condition(timeslice, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_no_condition(timeslice, None, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_condition(timeslice, None, None, None, None, None, end_of_timeslice, None)
+                self.add_instruction_decoherence(timeslice, None, None, None, end_of_timeslice)
             return
         # Check whether the current gate operation is a controlled gate without condition
         elif timeslice_node.controlled_operation and (not timeslice_node.if_flag):
@@ -438,6 +536,11 @@ class Instructions:
             if timeslice_node.target_qubit:
                 self.add_instruction_control_gate_no_condition(timeslice, timeslice_node.gate_operation, qubit, \
                     [quantumcircuit.qubits_idx[timeslice_node.connected_qubits[i]] for i in range(len(timeslice_node.connected_qubits))], end_of_timeslice, timeslice_node.parameters)
+            if end_of_timeslice:
+                self.add_instruction_single_gate_no_condition(timeslice, None, None, end_of_timeslice, None)
+                self.add_instruction_single_gate_condition(timeslice, None, None, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_condition(timeslice, None, None, None, None, None, end_of_timeslice, None)
+                self.add_instruction_decoherence(timeslice, None, None, None, end_of_timeslice)
             return
         # Check whether the current gate operation is a controlled gate with condition
         elif timeslice_node.controlled_operation and timeslice_node.if_flag:
@@ -446,6 +549,21 @@ class Instructions:
                 self.add_instruction_control_gate_condition(timeslice, timeslice_node.gate_operation, qubit, \
                     [quantumcircuit.qubits_idx[timeslice_node.connected_qubits[i]] for i in range(len(timeslice_node.connected_qubits))],\
                         quantumcircuit.cregs_idx[timeslice_node.if_creg], timeslice_node.if_num, end_of_timeslice, timeslice_node.parameters)
+            if end_of_timeslice:
+                self.add_instruction_single_gate_no_condition(timeslice, None, None, end_of_timeslice, None)
+                self.add_instruction_single_gate_condition(timeslice, None, None, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_no_condition(timeslice, None, None, None, end_of_timeslice, None)
+                self.add_instruction_decoherence(timeslice, None, None, None, end_of_timeslice)
+            return
+        # Check whether the current gate operation is a decoherence operation
+        elif timeslice_node.gate_operation in self.decoherence:
+            # add_instruction_decoherence(self, timeslice, qubit, decoherence, prob, end_of_timeslice = False)
+            self.add_instruction_decoherence(timeslice, qubit, timeslice_node.gate_operation, timeslice_node.parameters, end_of_timeslice)
+            if end_of_timeslice:
+                self.add_instruction_single_gate_no_condition(timeslice, None, None, end_of_timeslice, None)
+                self.add_instruction_single_gate_condition(timeslice, None, None, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_no_condition(timeslice, None, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_condition(timeslice, None, None, None, None, None, end_of_timeslice, None)
             return
     
     @staticmethod
@@ -464,6 +582,7 @@ class Instructions:
                     instruction.add_instruction_single_gate_condition(timeslice_idx, None, None, None, None, end_of_timeslice, None)
                     instruction.add_instruction_control_gate_no_condition(timeslice_idx, None, None, None, end_of_timeslice, None)
                     instruction.add_instruction_control_gate_condition(timeslice_idx, None, None, None, None, None, end_of_timeslice, None)
+                    instruction.add_instruction_decoherence(timeslice_idx, None, None, None, end_of_timeslice)
                     continue
                 if f"timeslice_{timeslice_idx}" in quantumcircuit.qubits[qubit]:
                     instruction.instruction_gen_timeslice(timeslice_idx, qubit_idx, quantumcircuit.qubits[qubit][f"timeslice_{timeslice_idx}"], end_of_timeslice, quantumcircuit)

@@ -360,7 +360,7 @@ class Quantum_circuit:
         if if_flag:
             if_creg_name = if_creg[0] + f"[{if_creg[1]}]" if if_creg[1] != -1 else if_creg[0]+"[0]"
             if_creg_num = if_num
-        qubit_names = [qubits[0][0] + f"[{qubits[0][1]}]" if qubits[0][1] != -1 else qubits[0][0]]+"[0]"
+        qubit_names = [qubits[0][0] + f"[{qubits[0][1]}]" if qubits[0][1] != -1 else qubits[0][0]+"[0]"]
         # add the control qubit to the list and find the maximum timeslice index
         max_time_slice = self.qubit_max_time_slice[qubit_names[0]]
         for i in range(1, len(qubits)):
