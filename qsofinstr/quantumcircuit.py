@@ -62,7 +62,6 @@ class Time_slice_node:
             self.parameters.append(parameter)
     
 
-
 class Quantum_circuit:
     # Class level attributes to enable the hardware specification and optimization decorators
     hardware_specification_enable = True
@@ -70,6 +69,11 @@ class Quantum_circuit:
         self.name = ""
         self.qubits = {}
         self.cregs = {}
+        # The following two dictionaries are used to store the index of each qubit and creg mainly for instruction generation
+        self.qubits_idx = {}
+        self.cregs_idx = {}
+        self.qubits_idx_idx = 0
+        self.cregs_idx_idx = 0
         # This is an intermidiate variable to store the current maximum time slice index for each qubit 
         self.qubit_max_time_slice = {}
         # This is an intermidiate variable to store the current maximum time slice index for the classical bit
@@ -80,10 +84,14 @@ class Quantum_circuit:
     def add_qubit(self, qubit_name, size):
         for i in range(size):
             self.qubits[qubit_name + f"[{i}]"] = {} # the value of each qubit is a dictionary, where key is timeslice and value is the timeslice node
+            self.qubits_idx[qubit_name + f"[{i}]"] = self.qubits_idx_idx
+            self.qubits_idx_idx += 1
     
     def add_creg(self, creg_name, size):
         for i in range(size):
             self.cregs[creg_name + f"[{i}]"] = {}
+            self.cregs_idx[creg_name + f"[{i}]"] = self.cregs_idx_idx
+            self.cregs_idx_idx += 1
     
     # Add the current maximum time slice index for the qubit 
     def add_qubit_max_time_slice(self, qubit_name, time_slice_index, size=1):
@@ -399,7 +407,14 @@ class Quantum_circuit:
             for gate in Instruction.instructions[timeslice].instructions:
                 print(gate)
                 for i in range(len(Instruction.instructions[timeslice].instructions[gate])):
-                    print(Instructions.GetBinary(Instruction.instructions[timeslice].instructions[gate][i], Instructions.N_instr_bits))
+                    if gate == "control_gate_no_condition" or gate == "control_gate_condition":
+                        for j in range(len(Instruction.instructions[timeslice].instructions[gate][i])): 
+                            instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[gate][i][j], Instructions.N_instr_bits)
+                            print(instr)
+                    else:
+                        instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[gate][i], Instructions.N_instr_bits)
+                        print(instr)
+        print(Instruction.N_qubit_bits)
             
     # Define the function to draw the draft quantum circuit for testing
     def test_draw(self):

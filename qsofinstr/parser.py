@@ -1390,7 +1390,6 @@ class Parser(Token):
                     self.error_at(self.current_file.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
             elif self.OPAQUE_declare:
                 if len(exp_list) == len(self.opaques[self.GATE_name].params):
-                    
                     self.error_at(self.current_file.token_idx, f"The number of parameters exceeds the number of parameters required for opaque {self.GATE_name}")
             else:
                 if len(exp_list) == quantumcircuit.Param_Num_Table[self.GATE_name_support]:
@@ -1402,7 +1401,7 @@ class Parser(Token):
             if len(exp_list) < len(self.gates[self.GATE_name].params):
                 self.error_at(self.current_file.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
         elif self.OPAQUE_declare:
-             if len(exp_list) < len(self.opaques[self.GATE_name].params):
+            if len(exp_list) < len(self.opaques[self.GATE_name].params):
                 self.error_at(self.current_file.token_idx, f"The number of parameters is less than the number of parameters required for opaque {self.GATE_name}")
         else:
             if len(exp_list) < quantumcircuit.Param_Num_Table[self.GATE_name_support]:
