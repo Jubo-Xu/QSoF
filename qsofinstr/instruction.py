@@ -130,7 +130,9 @@ class Instructions:
         # Check whether the instruction should be ended
         if end_of_timeslice and (qubit is None) and (gate is None):
             if (len(self.instructions[timeslice].instructions["single_gate_no_condition"]) > 0):
-                self.instructions[timeslice].instructions["single_gate_no_condition"][self.instructions[timeslice].instruction_index["single_gate_no_condition"]] += (1 << self.instructions[timeslice].bit_position["single_gate_no_condition"]) - 1
+                # Set the remaining bits to 1 if they haven't been inverted
+                if not self.instructions[timeslice].new_instruction_need["single_gate_no_condition"]:
+                    self.instructions[timeslice].instructions["single_gate_no_condition"][self.instructions[timeslice].instruction_index["single_gate_no_condition"]] += (1 << self.instructions[timeslice].bit_position["single_gate_no_condition"]) - 1
                 # Set the most significant bit to 1 if the last instruction being added is single qubit gate without condition
                 if self.instructions[timeslice].Operation_last == "single_gate_no_condition":
                     self.instructions[timeslice].instructions["single_gate_no_condition"][self.instructions[timeslice].instruction_index["single_gate_no_condition"]] += (1 << (self.N_instr_bits-1))
@@ -183,7 +185,8 @@ class Instructions:
         # Check whether the instruction should be ended
         if end_of_timeslice and (qubit is None) and (gate is None):
             if len(self.instructions[timeslice].instructions["single_gate_condition"]) > 0:
-                self.instructions[timeslice].instructions["single_gate_condition"][self.instructions[timeslice].instruction_index["single_gate_condition"]] += (1 << self.instructions[timeslice].bit_position["single_gate_condition"]) - 1
+                if not self.instructions[timeslice].new_instruction_need["single_gate_condition"]:
+                    self.instructions[timeslice].instructions["single_gate_condition"][self.instructions[timeslice].instruction_index["single_gate_condition"]] += (1 << self.instructions[timeslice].bit_position["single_gate_condition"]) - 1
                 # Set the most significant bit to 1 if the last instruction being added is single qubit gate with condition
                 if self.instructions[timeslice].Operation_last == "single_gate_condition":
                     self.instructions[timeslice].instructions["single_gate_condition"][self.instructions[timeslice].instruction_index["single_gate_condition"]] += (1 << (self.N_instr_bits-1))
@@ -257,14 +260,16 @@ class Instructions:
             if (len(self.instructions[timeslice].instructions["control_gate_no_condition"][0]) > 0) or (len(self.instructions[timeslice].instructions["control_gate_no_condition"][1]) > 0):
                 # Set the parameters for single control qubit
                 if len(self.instructions[timeslice].instructions["control_gate_no_condition"][0]) > 0:
-                    # Set the remaining bits to 1 for single control qubit
-                    self.instructions[timeslice].instructions["control_gate_no_condition"][0][self.instructions[timeslice].instruction_index["control_gate_no_condition"][0]] += (1 << self.instructions[timeslice].bit_position["control_gate_no_condition"][0]) - 1
+                    # Set the remaining bits to 1 for single control qubit if they haven't been inverted
+                    if not self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][0]:
+                        self.instructions[timeslice].instructions["control_gate_no_condition"][0][self.instructions[timeslice].instruction_index["control_gate_no_condition"][0]] += (1 << self.instructions[timeslice].bit_position["control_gate_no_condition"][0]) - 1
                     # Set the new instruction need of both single control qubit and multiple control qubits to True
                     self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][0] = True
                 # Set the parameters for multiple control qubits
                 if len(self.instructions[timeslice].instructions["control_gate_no_condition"][1]) > 0:
-                    # Set the remaining bits to 1 for single control qubit
-                    self.instructions[timeslice].instructions["control_gate_no_condition"][1][self.instructions[timeslice].instruction_index["control_gate_no_condition"][1]] += (1 << self.instructions[timeslice].bit_position["control_gate_no_condition"][1]) - 1
+                    # Set the remaining bits to 1 for single control qubit if they haven't been inverted
+                    if not self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][1]:
+                        self.instructions[timeslice].instructions["control_gate_no_condition"][1][self.instructions[timeslice].instruction_index["control_gate_no_condition"][1]] += (1 << self.instructions[timeslice].bit_position["control_gate_no_condition"][1]) - 1
                     # Set the new instruction need of both single control qubit and multiple control qubits to True
                     self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][1] = True
                 # Set the most significant bit to 1 based on whether the last instruction is for single control qubit or multiple control qubits if the last instruction being added is control gate without condition
@@ -338,13 +343,15 @@ class Instructions:
                 # Set the parameters for single control qubit
                 if len(self.instructions[timeslice].instructions["control_gate_condition"][0]) > 0:
                     # Set the remaining bits to 1 for single control qubit
-                    self.instructions[timeslice].instructions["control_gate_condition"][0][self.instructions[timeslice].instruction_index["control_gate_condition"][0]] += (1 << self.instructions[timeslice].bit_position["control_gate_condition"][0]) - 1
+                    if not self.instructions[timeslice].new_instruction_need["control_gate_condition"][0]:
+                        self.instructions[timeslice].instructions["control_gate_condition"][0][self.instructions[timeslice].instruction_index["control_gate_condition"][0]] += (1 << self.instructions[timeslice].bit_position["control_gate_condition"][0]) - 1
                     # Set the new instruction need of both single control qubit and multiple control qubits to True
                     self.instructions[timeslice].new_instruction_need["control_gate_condition"][0] = True
                 # Set the parameters for multiple control qubits
                 if len(self.instructions[timeslice].instructions["control_gate_condition"][1]) > 0:
                     # Set the remaining bits to 1 for single control qubit
-                    self.instructions[timeslice].instructions["control_gate_condition"][1][self.instructions[timeslice].instruction_index["control_gate_condition"][1]] += (1 << self.instructions[timeslice].bit_position["control_gate_condition"][1]) - 1
+                    if not self.instructions[timeslice].new_instruction_need["control_gate_condition"][1]:
+                        self.instructions[timeslice].instructions["control_gate_condition"][1][self.instructions[timeslice].instruction_index["control_gate_condition"][1]] += (1 << self.instructions[timeslice].bit_position["control_gate_condition"][1]) - 1
                     # Set the new instruction need of both single control qubit and multiple control qubits to True
                     self.instructions[timeslice].new_instruction_need["control_gate_condition"][1] = True
                 # Set the most significant bit to 1 based on whether the last instruction is for single control qubit or multiple control qubits if the last instruction being added is control gate without condition
@@ -434,7 +441,9 @@ class Instructions:
         # Check whether the instruction should be ended
         if end_of_timeslice and (qubit is None) and (decoherence is None) and (prob is None):
             if (len(self.instructions[timeslice].instructions["decoherence"]) > 0):
-                self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][0]] += (1 << self.instructions[timeslice].bit_position["decoherence"][0]) - 1
+                # Set the remaining bits of decoherence instruction to 1 if they haven't been inverted
+                if not self.instructions[timeslice].new_instruction_need["decoherence"]:
+                    self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][0]] += (1 << self.instructions[timeslice].bit_position["decoherence"][0]) - 1
                 # Set the remaining bits of parameter instruction to 1 if there are remaining bits
                 if self.instructions[timeslice].bit_position["decoherence"][1] > 0:
                     self.instructions[timeslice].instructions["decoherence"][self.instructions[timeslice].instruction_index["decoherence"][1]] += (1 << self.instructions[timeslice].bit_position["decoherence"][1]) - 1
