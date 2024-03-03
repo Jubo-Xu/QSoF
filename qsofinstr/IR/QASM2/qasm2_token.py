@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 
+
 TK_OPERATOR = 0
 TK_NUM = 1
 TK_IDENT = 2
@@ -72,7 +73,9 @@ class Token(object):
         # The list of the files
         self.include_file_list = []
         
-    def file2str(self, filename):
+    def file2str(self, filename0):
+        root_dir = Path(__file__).resolve().parents[2]
+        filename = root_dir / filename0
         with open(filename, 'r') as file:
             for line in file:
             # Add the processed line to the contents string with a space

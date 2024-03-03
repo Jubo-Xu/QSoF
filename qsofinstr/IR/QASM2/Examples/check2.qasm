@@ -30,5 +30,9 @@ tdg q[3];
 ccx q[0], q[2], q[3];
 mixamp(1) q[0];
 mixphase(2) q[1];
-
+measure q[0] -> c[0];
+if (c[0] == 1) XRX(1) q[1], q[0];
+if (c[0] == 1) measure q[1] -> c[1];
+if (c[0] == 1) mixamp(1) q[2];
+if (c == 3) reset q[2];
 

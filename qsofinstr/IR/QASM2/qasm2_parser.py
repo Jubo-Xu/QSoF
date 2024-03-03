@@ -1,10 +1,10 @@
-from token import Token
-import token
-from quantumcircuit import Quantum_circuit
-from quantumcircuit import Time_slice_node
-import quantumcircuit
+from IR.QASM2.qasm2_token import Token
+from IR.QASM2 import qasm2_token
+# import quantumcircuit
+import timeslice
 import math
 from collections import deque
+import os
 
 # Define the node kinds
 ND_NUM = 0
@@ -174,13 +174,17 @@ class Filesystem:
         self.PARSE_FINISH = False # The flag to indicate whether the parsing is finished
         self.include_dict = None # The dictionary for the include files of current file
     
+    def get_name(self):
+        return self.name
+    
     def set_include_dict(self, dic):
         self.include_dict = {file: None for file in dic}
 
 
 class Parser(Token):
     def __init__(self, filenode):
-        super().__init__()
+        super().__init__() 
+        self.design_name = os.path.splitext(os.path.basename(filenode.get_name()))[0]
         # Set up the Hash table for opaques, qregs, and cregs
         # For opaques, the key is the name of the opaque, and the element is a tuple of 
         self.opaques = {}
@@ -221,7 +225,9 @@ class Parser(Token):
         # The flag to indicate whether the current parsing gate is a single qubit gate(mainly for the cases like H q; where q has size larger than 1)
         self.SINGLE_QUBIT_GATE = False
         
-        
+    def get_name(self):
+        return self.design_name
+    
     @staticmethod
     def create_node(kind, leftnode=None, rightnode=None):
         node = Node(kind)
@@ -260,13 +266,13 @@ class Parser(Token):
         return node
     
     def expect(self, op):
-        if self.current_file.token[self.current_file.token_idx][self.kind_idx] != token.TK_OPERATOR or self.current_file.token[self.current_file.token_idx][self.str_idx] != op:
+        if self.current_file.token[self.current_file.token_idx][self.kind_idx] != qasm2_token.TK_OPERATOR or self.current_file.token[self.current_file.token_idx][self.str_idx] != op:
             Token.annotate_error(self.current_file.name, self.current_file.file_str, self.current_file.token[self.current_file.token_idx-1][self.idx_idx], "missing operator: "\
                 + op, self.current_file.token[self.current_file.token_idx-1][self.line_count_idx], self.current_file.token[self.current_file.token_idx-1][self.err_line_idx_idx])
         self.current_file.token_idx += 1
         
     def consume_operator_str(self, op):
-        if self.current_file.token[self.current_file.token_idx][self.kind_idx] != token.TK_OPERATOR or self.current_file.token[self.current_file.token_idx][self.str_idx] != op:
+        if self.current_file.token[self.current_file.token_idx][self.kind_idx] != qasm2_token.TK_OPERATOR or self.current_file.token[self.current_file.token_idx][self.str_idx] != op:
             return False
         self.current_file.token_idx += 1
         return True
@@ -275,14 +281,14 @@ class Parser(Token):
         return self.current_file.token[idx][self.kind_idx]
 
     def check_operator_str(self, idx, str):
-        return self.current_file.token[idx][self.kind_idx] == token.TK_OPERATOR and self.current_file.token[idx][self.str_idx] == str
+        return self.current_file.token[idx][self.kind_idx] == qasm2_token.TK_OPERATOR and self.current_file.token[idx][self.str_idx] == str
     
     def error_at(self, idx, message):
         Token.annotate_error(self.current_file.name, self.current_file.file_str, self.current_file.token[idx][self.idx_idx], message, self.current_file.token[idx][self.line_count_idx], self.current_file.token[idx][self.err_line_idx_idx])
     
     def check_num_error(self, name):
         # Check whether the qreg or creg size is missing or wrong type is used
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_NUM:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_NUM:
             if self.check_operator_str(self.current_file.token_idx, "]"):
                 self.error_at(self.current_file.token_idx, "There has to be a number for the "+name)
             else:
@@ -305,12 +311,12 @@ class Parser(Token):
                 file_node.set_include_dict(include_dic)
                 filenode.include_dict[file] = file_node
             # if the file is already completely parsed, then skip it
-            if filenode.include_dict[file].token[filenode.include_dict[file].token_idx][self.kind_idx] == token.TK_EOF:
+            if filenode.include_dict[file].token[filenode.include_dict[file].token_idx][self.kind_idx] == qasm2_token.TK_EOF:
                 continue
             # parsing the file and if the gate definition is found, the while loop will be terminated
             # set the current filenode of the parser to this file
             self.current_file = filenode.include_dict[file]
-            while (not self.GATE_FOUND) and (filenode.include_dict[file].token[filenode.include_dict[file].token_idx][self.kind_idx] != token.TK_EOF):
+            while (not self.GATE_FOUND) and (filenode.include_dict[file].token[filenode.include_dict[file].token_idx][self.kind_idx] != qasm2_token.TK_EOF):
                 self.statement()
             # if the gate is found, then return True
             if self.GATE_FOUND:
@@ -420,34 +426,34 @@ class Parser(Token):
     
     # Recursive descent parsing of program
     def program(self):
-        while self.current_file.token[self.current_file.token_idx][self.kind_idx] != token.TK_EOF:
+        while self.current_file.token[self.current_file.token_idx][self.kind_idx] != qasm2_token.TK_EOF:
             self.code.append(self.statement())
 
     # Recursive descent parsing of statement
     def statement(self):
-        if self.check_TK_kind(self.current_file.token_idx) == token.TK_QREG or self.check_TK_kind(self.current_file.token_idx) == token.TK_CREG:
+        if self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_QREG or self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CREG:
             return self.decl()
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_GATE:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_GATE:
             return self.gatedecl()
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_OPAQUE:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_OPAQUE:
             # Check whether the opaque is already defined
             if self.current_file.token[self.current_file.token_idx+1][self.str_idx] in self.opaques:
                 self.error_at(self.current_file.token_idx+1, "opaque "+self.current_file.token[self.current_file.token_idx+1][self.str_idx]+" already defined")
             # Check whether the opaque defined is supported by QSoF
-            if self.current_file.token[self.current_file.token_idx+1][self.str_idx] not in quantumcircuit.Opaque_Table:
+            if self.current_file.token[self.current_file.token_idx+1][self.str_idx] not in timeslice.Opaque_Table:
                 self.error_at(self.current_file.token_idx+1, "opaque "+self.current_file.token[self.current_file.token_idx+1][self.str_idx]+" is not supported by QSoF")
             if self.check_operator_str(self.current_file.token_idx+2, "("):
                 # Recursive descent parsing for 'opaque id (idlist) idlist ;'
-                if self.check_TK_kind(self.current_file.token_idx+3) == token.TK_IDENT:
+                if self.check_TK_kind(self.current_file.token_idx+3) == qasm2_token.TK_IDENT:
                     name = self.current_file.token[self.current_file.token_idx+1][self.str_idx]
                     self.get_next_token(3)
                     opaque_instance = Opaque(name)
                     params = self.idlist_param()
                     opaque_instance.add_params(params)
                     # Check whether the number of parameters is incorrect 
-                    if len(params) != quantumcircuit.Opaque_Table[name]:
+                    if len(params) != timeslice.Opaque_Table[name]:
                         # Check whether the number of parameters is larger than the maximum number of parameters
-                        if len(params) > quantumcircuit.Opaque_Table[name]:
+                        if len(params) > timeslice.Opaque_Table[name]:
                             self.error_at(self.current_file.token_idx-1, "The number of parameters exceeds the maximum number of parameters of opaque "+name)
                         else:
                             self.error_at(self.current_file.token_idx-1, "The number of parameters is less than the number of parameters required for opaque "+name)
@@ -465,8 +471,8 @@ class Parser(Token):
                     self.get_next_token()
                     name = self.current_file.token[self.current_file.token_idx][self.str_idx]
                     # Check whether the opaque should have parameters
-                    if quantumcircuit.Opaque_Table[name] != 0:
-                        self.error_at(self.current_file.token_idx+2, "The number of parameters should be "+str(quantumcircuit.Opaque_Table[name]))
+                    if timeslice.Opaque_Table[name] != 0:
+                        self.error_at(self.current_file.token_idx+2, "The number of parameters should be "+str(timeslice.Opaque_Table[name]))
                     self.get_next_token(3)
                     opaque_instance = Opaque(name)
                     args = self.idlist_qubit().qregs
@@ -480,12 +486,12 @@ class Parser(Token):
                 else:
                     self.error_at(self.current_file.token_idx+3, "The parameters could only be identifiers or empty")
             # Recursive descent parsing for 'opaque id idlist ;'
-            elif self.check_TK_kind(self.current_file.token_idx+2) == token.TK_IDENT:
+            elif self.check_TK_kind(self.current_file.token_idx+2) == qasm2_token.TK_IDENT:
                 self.get_next_token()
                 name = self.current_file.token[self.current_file.token_idx][self.str_idx]
                 # Check whether the opaque should have parameters
-                if quantumcircuit.Opaque_Table[name] != 0:
-                    self.error_at(self.current_file.token_idx, "The number of parameters should be "+str(quantumcircuit.Opaque_Table[name]))
+                if timeslice.Opaque_Table[name] != 0:
+                    self.error_at(self.current_file.token_idx, "The number of parameters should be "+str(timeslice.Opaque_Table[name]))
                 self.get_next_token(2)
                 opaque_instance = Opaque(name)
                 args = self.idlist_qubit().qregs
@@ -505,10 +511,12 @@ class Parser(Token):
                 else:
                     self.error_at(self.current_file.token_idx+2, "The arguments or parameters cannot be this type")
         # Recursive descent parsing for 'if (condition) qop'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IF:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_IF:
             self.get_next_token()
             self.expect("(")
+            self.IF = True
             condition = self.condition()
+            self.IF = False
             self.expect(")")
             if self.check_operator_str(self.current_file.token_idx, ";"):
                 self.error_at(self.current_file.token_idx, "The statement of if cannot be empty")
@@ -516,7 +524,7 @@ class Parser(Token):
             node_stmt = Parser.create_node(ND_IF, condition, qop)
             return node_stmt
         # Recursive descent parsing for 'barrier idlist ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_BARRIER:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_BARRIER:
             self.get_next_token()
             args = self.idlist_qubit()
             self.expect(";")
@@ -528,18 +536,41 @@ class Parser(Token):
     
     # Recursive descent parsing for 'condition := id == nninteger'
     def condition(self):
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
             if self.check_operator_str(self.current_file.token_idx, ")"):
                 self.error_at(self.current_file.token_idx, "The condition cannot be empty")
             else:
                 self.error_at(self.current_file.token_idx, "The condition cannot be this type")
         condition_lhs = self.argument_c()
+        self.expect("==")
+        # Check whether the next token is not a number
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_NUM:
+            # if the next token is a positive sign, the go to the next token and check whether it's a number
+            if self.check_operator_str(self.current_file.token_idx, "+"):
+                self.get_next_token()
+                if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_NUM:
+                    self.error_at(self.current_file.token_idx, "The value here should be a number")
+            # if the next token is a negative sign, error happens
+            elif self.check_operator_str(self.current_file.token_idx, "-"):
+                self.error_at(self.current_file.token_idx, f"This value cannot be represented by {self.cregs[condition_lhs.cregs[0][0]]} bits creg {condition_lhs.cregs[0][0]}")
+            # otherwise, error happens
+            else:
+                self.error_at(self.current_file.token_idx, "The value here should be a number")
+        condition_rhs = self.create_node_num(self.current_file.token[self.current_file.token_idx][self.val_idx])
         # Check whether the size of the creg is 1 if it's not indexed
         if condition_lhs.cregs[0][1] == -1:
+            # Check whether the value is out of range that can be represented by creg if the creg has size larger than 1
             if self.cregs[condition_lhs.cregs[0][0]] != 1:
-                self.error_at(self.current_file.token_idx, "The condition should be a single bit")
-        self.expect("==")
-        condition_rhs = self.create_node_num(self.current_file.token[self.current_file.token_idx][self.val_idx])
+                if not (0 <= self.current_file.token[self.current_file.token_idx][self.val_idx] < 2**self.cregs[condition_lhs.cregs[0][0]]): 
+                    self.error_at(self.current_file.token_idx, f"This value cannot be represented by {self.cregs[condition_lhs.cregs[0][0]]} bits creg {condition_lhs.cregs[0][0]}")
+            # Check whether the value is 0 or 1 if the creg has size 1
+            else:
+                if self.current_file.token[self.current_file.token_idx][self.val_idx] not in [0, 1]:
+                    self.error_at(self.current_file.token_idx, f"The value of the creg {condition_lhs.cregs[0][0]} should be 0 or 1")
+        # Check whether the value is 0 or 1 if the creg is indexed
+        else:
+            if self.current_file.token[self.current_file.token_idx][self.val_idx] not in [0, 1]:
+                self.error_at(self.current_file.token_idx, f"The value of the creg {condition_lhs.cregs[0][0]}[{condition_lhs.cregs[0][1]}] should be 0 or 1")
         self.get_next_token()
         node_condition = Parser.create_node(ND_EQUAL, condition_lhs, condition_rhs)
         return node_condition
@@ -547,10 +578,10 @@ class Parser(Token):
     # Recursive descent parsing for 'decl := qreg id [nninteger] ; | creg id [nninteger] ;'
     def decl(self):
         # Recursive descent parsing for 'qreg id [nninteger] ;'
-        if self.check_TK_kind(self.current_file.token_idx) == token.TK_QREG:
+        if self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_QREG:
             self.get_next_token()
             # Check whether the qreg name is missing or wrong type is used
-            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
                 if self.check_operator_str(self.current_file.token_idx, "["):
                     self.error_at(self.current_file.token_idx, "The qreg name is missing")
                 else:
@@ -571,10 +602,10 @@ class Parser(Token):
             node_decl.add_str(name)
             return node_decl
         # Recursive descent parsing for 'creg id [nninteger] ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CREG:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CREG:
             self.get_next_token()
             # Check whether the creg name is missing or wrong type is used
-            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
                 if self.check_operator_str(self.current_file.token_idx, "["):
                     self.error_at(self.current_file.token_idx, "The creg name is missing")
                 else:
@@ -606,11 +637,11 @@ class Parser(Token):
     # Recursive descent parsing for 'gatedecl := gate id idlist {goplist}|gate id () idlist {goplist}|gate id (idlist) idlist {goplist}'
     def gatedecl(self):
         # Check whether the gate keyword is missing
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_GATE:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_GATE:
             self.error_at(self.current_file.token_idx, "The gate keyword is missing")
         self.get_next_token()
         # Check whether the gate name is missing or wrong type is used 
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
             if self.check_operator_str(self.current_file.token_idx, "("):
                 self.error_at(self.current_file.token_idx, "The gate name is missing")
             elif self.check_operator_str(self.current_file.token_idx, "{") or self.check_operator_str(self.current_file.token_idx, ";"):
@@ -618,7 +649,7 @@ class Parser(Token):
             else:
                 self.error_at(self.current_file.token_idx, "The gate name cannot be this type")
                 return
-        if self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT and self.check_operator_str(self.current_file.token_idx+1, ","):
+        if self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_IDENT and self.check_operator_str(self.current_file.token_idx+1, ","):
             self.error_at(self.current_file.token_idx, "The gate name is missing")
         # Check whether the gate is already defined 
         if self.current_file.token[self.current_file.token_idx][self.str_idx] in self.gates:
@@ -635,14 +666,14 @@ class Parser(Token):
         if self.check_operator_str(self.current_file.token_idx, "("):
             self.get_next_token()
             # Check for some errors 
-            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT and not self.check_operator_str(self.current_file.token_idx, ")"):
+            if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT and not self.check_operator_str(self.current_file.token_idx, ")"):
                 self.error_at(self.current_file.token_idx, "The parameters should be identifiers")
             # Check for nonempty parameters
-            if self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
+            if self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_IDENT:
                 params.extend(self.idlist_param())
             self.expect(")")
         # Check whether the arguments are missing or wrong type is used
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
             if self.check_operator_str(self.current_file.token_idx, "{"):
                 self.error_at(self.current_file.token_idx, "The arguments are missing")
             elif self.check_operator_str(self.current_file.token_idx, ";"):
@@ -675,10 +706,10 @@ class Parser(Token):
     # Recursive descent parsing for 'qop := uop | measure argument -> argument ; | reset argument ;'
     def qop(self):
         # Recursive descent parsing for 'measure argument -> argument ;'
-        if self.check_TK_kind(self.current_file.token_idx) == token.TK_MEASURE:
+        if self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_MEASURE:
             self.get_next_token()
             # Check whether the argument is missing or wrong type is used 
-            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
                 if self.check_operator_str(self.current_file.token_idx, "->"):
                     self.error_at(self.current_file.token_idx, "The qreg argument is missing")
                 elif self.check_operator_str(self.current_file.token_idx, ";"):
@@ -689,7 +720,7 @@ class Parser(Token):
             node_lhs = self.argument()
             self.expect("->")
             # Check whether the destination is missing or wrong type is used
-            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
                 if self.check_operator_str(self.current_file.token_idx, ";"):
                     self.error_at(self.current_file.token_idx, "The creg destination is missing")
                 else:
@@ -710,10 +741,10 @@ class Parser(Token):
             self.expect(";")
             node_qof = Parser.create_node(ND_MEASURE, node_lhs, node_rhs)
             return node_qof
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RESET:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_RESET:
             self.get_next_token()
             # Check whether the argument is missing or wrong type is used
-            if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+            if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
                 if self.check_operator_str(self.current_file.token_idx, ";"):
                     self.error_at(self.current_file.token_idx, "The qreg argument is missing")
                 else:
@@ -730,7 +761,7 @@ class Parser(Token):
     # Recursive descent parsing for 'argument := id | id [nninteger]'
     def argument(self):
         # Check whether the argument is identifier
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
             self.error_at(self.current_file.token_idx, "The qreg argument should be an identifier")
         # Check whether the argument is declared for the gate definition
         if self.GATE_define:
@@ -768,7 +799,7 @@ class Parser(Token):
     # Recursive descent parsing for 'argument_c := id | id [nninteger]'
     def argument_c(self):
         # Check whether the argument is identifier
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
             self.error_at(self.current_file.token_idx, "The creg argument should be an identifier")
         # Check whether the argument is already defined 
         if not self.current_file.token[self.current_file.token_idx][self.str_idx] in self.cregs:
@@ -789,9 +820,10 @@ class Parser(Token):
             self.expect("]")
             return node_argument
         else:
-            # Check if the creg is not indexed then it should be a bit instead of a register
             if (self.cregs[name] != 1) and (not self.MEASURE):
-                self.error_at(self.current_file.token_idx, "The creg "+name+" should be indexed")
+                # Check if the creg is not indexed then it should be a bit instead of a register
+                if not self.IF:
+                    self.error_at(self.current_file.token_idx, "The creg "+name+" should be indexed")
             node_argument = Parser.create_node_creg((name, -1))
             return node_argument
     
@@ -928,119 +960,119 @@ class Parser(Token):
     
     def uop(self):
         # Recursive descent parsing for 'U (explist) argument ;'
-        if self.check_TK_kind(self.current_file.token_idx) == token.TK_U:
+        if self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_U:
             node_uop = self.uop_with_explist_single(ND_U, "U")
             return node_uop
         # Recursive descent parsing for u1
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_U1:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_U1:
             node_uop = self.uop_with_explist_single(ND_U1, "U1")
             return node_uop
         # Recursive descent parsing for u2
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_U2:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_U2:
             node_uop = self.uop_with_explist_single(ND_U2, "U2")
             return node_uop
         # Recursive descent parsing for 'CX argument , argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CX:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CX:
             node_uop = self.uop_without_explist_controlled(ND_CX, "CX")
             return node_uop
         # Recursive descent parsing for 'X argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_X:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_X:
             node_uop = self.uop_without_explist_single(ND_X, "X")
             return node_uop
         # Recursive descent parsing for 'Y argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_Y:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_Y:
             node_uop = self.uop_without_explist_single(ND_Y, "Y")
             return node_uop
         # Recursive descent parsing for 'Z argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_Z:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_Z:
             node_uop = self.uop_without_explist_single(ND_Z, "Z")
             return node_uop
         # Recursive descent parsing for 'S argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_S:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_S:
             node_uop = self.uop_without_explist_single(ND_S, "S") 
             return node_uop
         # Recursive descent parsing for 'T argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_T:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_T:
             node_uop = self.uop_without_explist_single(ND_T, "T")
             return node_uop
         # Recursive descent parsing for 'RTHETA (explist) argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RTHETA:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_RTHETA:
             node_uop = self.uop_with_explist_single(ND_RTHETA, "RTHETA")
             return node_uop
         # Recursive descent parsing for 'RX (explist) argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RX:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_RX:
             node_uop = self.uop_with_explist_single(ND_RX, "RX")
             return node_uop
         # Recursive descent parsing for 'RY (explist) argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RY:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_RY:
             node_uop = self.uop_with_explist_single(ND_RY, "RY")
             return node_uop
         # Recursive descent parsing for 'RZ (explist) argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_RZ:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_RZ:
             node_uop = self.uop_with_explist_single(ND_RZ, "RZ")
             return node_uop
         # Recursive descent parsing for 'H argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_H:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_H:
             node_uop = self.uop_without_explist_single(ND_H, "H")
             return node_uop
         # Recursive descent parsing for 'CY argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CY:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CY:
             node_uop = self.uop_without_explist_controlled(ND_CY, "CY")
             return node_uop
         # Recursive descent parsing for 'CZ argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CZ:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CZ:
             node_uop = self.uop_without_explist_controlled(ND_CZ, "CZ")
             return node_uop
         # Recursive descent parsing for 'CU (explist) argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CU:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CU:
             node_uop = self.uop_with_explist_controlled(ND_CU, "CU")
             return node_uop
         # Recursive descent parsing for 'CU1 (explist) argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CU1:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CU1:
             node_uop = self.uop_with_explist_controlled(ND_CU1, "CU1")
             return node_uop
         # Recursive descent parsing for 'CS argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CS:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CS:
             node_uop = self.uop_without_explist_controlled(ND_CS, "CS")
             return node_uop
         # Recursive descent parsing for 'CT argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CT:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CT:
             node_uop = self.uop_without_explist_controlled(ND_CT, "CT")
             return node_uop
         # Recursive descent parsing for 'CRTHETA (explist) argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CRTHETA:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CRTHETA:
             node_uop = self.uop_with_explist_controlled(ND_CRTHETA, "CRTHETA")
             return node_uop
         # Recursive descent parsing for 'CRX (explist) argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CRX:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CRX:
             node_uop = self.uop_with_explist_controlled(ND_CRX, "CRX")
             return node_uop
         # Recursive descent parsing for 'CRY (explist) argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CRY:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CRY:
             node_uop = self.uop_with_explist_controlled(ND_CRY, "CRY")
             return node_uop
         # Recursive descent parsing for 'CRZ (explist) argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CRZ:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CRZ:
             node_uop = self.uop_with_explist_controlled(ND_CRZ, "CRZ")
             return node_uop
         # Recursive descent parsing for 'CH argument, argument ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CH:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CH:
             node_uop = self.uop_without_explist_controlled(ND_CH, "CH")
             return node_uop
         # Recursive descent parsing for idle gate
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_ID:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_ID:
             node_uop = self.uop_without_explist_single(-1, "ID")
             return
         # Recursive descent parsing for sdg gate
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_SDG:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_SDG:
             node_uop = self.uop_without_explist_single(ND_SDG, "SDG")
             return node_uop
         # Recursive descent parsing for tdg gate
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_TDG:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_TDG:
             node_uop = self.uop_without_explist_single(ND_TDG, "TDG")
             return node_uop
         # Recursive descent parsing for ccx gate
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_CCX:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_CCX:
             self.get_next_token()
             # Check whether there are parameters
             if self.check_operator_str(self.current_file.token_idx, "("):
@@ -1056,7 +1088,7 @@ class Parser(Token):
             node_uop = Parser.create_node(ND_CCX, argument)
             return node_uop
         # Recursive descent parsing for 'id idlist ; | id () idlist ; | id (explist) idlist ;'
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_IDENT:
             name = self.current_file.token[self.current_file.token_idx][self.str_idx]
             # Check whether the gate is a gate declare or an opaque declare
             Gate_declare_pre = self.GATE_declare
@@ -1093,7 +1125,7 @@ class Parser(Token):
                 if self.check_operator_str(self.current_file.token_idx, ")"):
                     self.expect(")")
                     # Check whether the arguments are missing or wrong type is used
-                    if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+                    if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
                         if self.check_operator_str(self.current_file.token_idx, ";"):
                             self.error_at(self.current_file.token_idx, "The arguments of the gate are missing")
                         else:
@@ -1115,7 +1147,7 @@ class Parser(Token):
                     explist = self.explist()
                     self.expect(")")
                      # Check whether the arguments are missing or wrong type is used
-                    if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+                    if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
                         if self.check_operator_str(self.current_file.token_idx, ";"):
                             self.error_at(self.current_file.token_idx, "The arguments of the gate are missing")
                         else:
@@ -1133,7 +1165,7 @@ class Parser(Token):
                     self.GATE_name = gate_name_pre
                     self.MULTI_CONTROL_QUBITS.clear()
                     return node_uop
-            elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
+            elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_IDENT:
                 args = self.idlist_qubit()
                 self.expect(";")
                 node_uop = Parser.create_node(ND_NOEXP_type, args)
@@ -1162,7 +1194,7 @@ class Parser(Token):
     # Recursive descent parsing for 'idlist := id | id [nninteger], idlist'
     def id_check_qubit(self, qreglist):
         # Check whether the argument is identifier
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
             self.error_at(self.current_file.token_idx, "The type should be identifier")
         # Check whether the argument is already declared for the gate definition
         if self.GATE_define:
@@ -1217,7 +1249,7 @@ class Parser(Token):
 
     def id_check(self, paramlist):
         # Check whether the argument is identifier
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_IDENT:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_IDENT:
             self.error_at(self.current_file.token_idx, "The type should be identifier")
         paramlist.append(self.current_file.token[self.current_file.token_idx][self.str_idx])
         self.get_next_token()
@@ -1255,22 +1287,22 @@ class Parser(Token):
     # Check for unary operators 
     def consume_unaryop(self):
         TK_kind = self.check_TK_kind(self.current_file.token_idx)
-        if TK_kind == token.TK_SIN:
+        if TK_kind == qasm2_token.TK_SIN:
             self.get_next_token()
             return ND_SIN
-        elif TK_kind == token.TK_COS:
+        elif TK_kind == qasm2_token.TK_COS:
             self.get_next_token()
             return ND_COS
-        elif TK_kind == token.TK_TAN:
+        elif TK_kind == qasm2_token.TK_TAN:
             self.get_next_token()
             return ND_TAN
-        elif TK_kind == token.TK_EXP:
+        elif TK_kind == qasm2_token.TK_EXP:
             self.get_next_token()
             return ND_EXP
-        elif TK_kind == token.TK_LN:
+        elif TK_kind == qasm2_token.TK_LN:
             self.get_next_token()
             return ND_LN
-        elif TK_kind == token.TK_SQRT:
+        elif TK_kind == qasm2_token.TK_SQRT:
             self.get_next_token()
             return ND_SQRT
         else:
@@ -1279,18 +1311,18 @@ class Parser(Token):
     # Recursive descent parsing for primary = real | nninteger | pi | id | unaryop"("exp")" | "("binaryop")"
     def primary(self):
         # Recursive descent parsing for real and nninteger
-        if self.check_TK_kind(self.current_file.token_idx) == token.TK_NUM:
+        if self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_NUM:
             val = self.current_file.token[self.current_file.token_idx][self.val_idx]*(10**self.current_file.token[self.current_file.token_idx][self.exp_idx])
             node_primary = Parser.create_node_num(val)
             self.current_file.token_idx += 1
             return node_primary
         # Recursive descent parsing for pi
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_PI:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_PI:
             node_primary = Parser.create_node(ND_PI)
             self.get_next_token()
             return node_primary
         # Recursive descent parsing for id
-        elif self.check_TK_kind(self.current_file.token_idx) == token.TK_IDENT:
+        elif self.check_TK_kind(self.current_file.token_idx) == qasm2_token.TK_IDENT:
             # Note! Here should be a check for whether the parameter is declared for this gate, this check will be in the code generation part
             node_primary = Parser.create_node(ND_IDENT)
             node_primary.add_str(self.current_file.token[self.current_file.token_idx][self.str_idx])
@@ -1320,7 +1352,7 @@ class Parser(Token):
     # Define the function to get the precedence of the current binary operator
     def get_binaryop_precedence(self):
         # Check whether the current token is an operator
-        if self.check_TK_kind(self.current_file.token_idx) != token.TK_OPERATOR:
+        if self.check_TK_kind(self.current_file.token_idx) != qasm2_token.TK_OPERATOR:
             self.error_at(self.current_file.token_idx, "This is not an operator")
         # Check whether the current operator is supported
         if not self.current_file.token[self.current_file.token_idx][self.str_idx] in binop_precedence:
@@ -1392,7 +1424,7 @@ class Parser(Token):
                 if len(exp_list) == len(self.opaques[self.GATE_name].params):
                     self.error_at(self.current_file.token_idx, f"The number of parameters exceeds the number of parameters required for opaque {self.GATE_name}")
             else:
-                if len(exp_list) == quantumcircuit.Param_Num_Table[self.GATE_name_support]:
+                if len(exp_list) == timeslice.Param_Num_Table[self.GATE_name_support]:
                     self.error_at(self.current_file.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
                 
             exp_list.append(self.exp())
@@ -1404,7 +1436,7 @@ class Parser(Token):
             if len(exp_list) < len(self.opaques[self.GATE_name].params):
                 self.error_at(self.current_file.token_idx, f"The number of parameters is less than the number of parameters required for opaque {self.GATE_name}")
         else:
-            if len(exp_list) < quantumcircuit.Param_Num_Table[self.GATE_name_support]:
+            if len(exp_list) < timeslice.Param_Num_Table[self.GATE_name_support]:
                 self.error_at(self.current_file.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
         node_explist = Parser.create_node_explist(exp_list)
         return node_explist
@@ -1983,26 +2015,33 @@ class Parser(Token):
         
         
     ### Define the function to generate the quantum circuit
-    def circuit_gen(self):
-        quantumcircuit = Quantum_circuit()
+    def circuit_gen(self, quantumcircuit):
+        # quantumcircuit = Quantum_circuit()
         for i in range(len(self.code)):
             self.code_gen(self.code[i], quantumcircuit)
-        return quantumcircuit
+        # return quantumcircuit
     
     #================================================================================================
     # Compilation
     #================================================================================================
     @staticmethod
-    def compile(filepath):
+    def compile(filepath, quantumcircuit):
         filename, file_str, TK, include_dic = Token.Tokenize(filepath)
         file_node = Filesystem(filename, file_str, TK)
         file_node.set_include_dict(include_dic)
         parser = Parser(file_node)
+        # Add the name for quantum circuit
+        quantumcircuit.set_name(parser.get_name())
         parser.Recursive_Descent_Parsing()
-        QC = parser.circuit_gen()
-        return QC
+        parser.circuit_gen(quantumcircuit)
+        # return QC
     
-filepath = "qsofinstr/test_instruction.qasm"
-QC = Parser.compile(filepath)
-QC.test_draw()    
-QC.test_instruction()
+# filepath = "qsofinstr/test_instruction.qasm"
+# filepath = "qsofinstr/quantum_teleporation.qasm"
+# filepath = "qsofinstr/check2.qasm"
+# filepath = "qsofinstr/qft0.qasm"
+# filepath = "qsofinstr/test_instruction_single_condition.qasm"
+# filepath = "qsofinstr/test_instruction_control_condition.qasm"
+# QC = Parser.compile(filepath)
+# QC.test_draw()    
+# QC.test_instruction()
