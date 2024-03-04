@@ -1,8 +1,6 @@
 import sys
 from pathlib import Path
 
-
-
 TK_OPERATOR = 0
 TK_NUM = 1
 TK_IDENT = 2
@@ -106,6 +104,30 @@ class Token(object):
                     while (i < len(TK.qasm_str)) and TK.qasm_str[i] != "\n":
                         i += 1
                     continue
+            # Get rid of OPENQASM 2.0
+            if TK.qasm_str[i]=="O" and TK.qasm_str[i+1]=="P" and TK.qasm_str[i+2]=="E" and TK.qasm_str[i+3]=="N" and TK.qasm_str[i+4]=="Q" and TK.qasm_str[i+5]=="A" and TK.qasm_str[i+6]=="S" and TK.qasm_str[i+7]=="M":
+                # Skip the spaces to find 2.0
+                i += 8
+                while (i < len(TK.qasm_str)) and TK.qasm_str[i].isspace():
+                    i += 1
+                # Check for 2.0
+                if len(TK.qasm_str) - i < 2:
+                    TK.annotate_error(TK.name, TK.qasm_str, i, "The version of OpenQASM should be 2.0", TK.line_count, TK.err_line_idx)
+                if (TK.qasm_str[i] != "2") and (TK.qasm_str[i+1] != ".") and (TK.qasm_str[i+2] != "0"):
+                    TK.annotate_error(TK.name, TK.qasm_str, i, "The version of OpenQASM should be 2.0", TK.line_count, TK.err_line_idx)
+                i += 2
+                # Check for missing ; if the current token index is at the end of the file
+                if i == len(TK.qasm_str)-1:
+                    TK.annotate_error(TK.name, TK.qasm_str, i, "Expect ;", TK.line_count, TK.err_line_idx)
+                # Skip the spaces to find ;
+                i += 1
+                while (i < len(TK.qasm_str)) and TK.qasm_str[i].isspace():
+                    i += 1
+                # Check for ;
+                if TK.qasm_str[i] != ";":
+                    TK.annotate_error(TK.name, TK.qasm_str, i, "Expect ;", TK.line_count, TK.err_line_idx)
+                i += 1
+                continue
             
             # Check for include files
             if TK.qasm_str[i]=="i"and TK.qasm_str[i+1]=="n"and TK.qasm_str[i+2]=="c"and TK.qasm_str[i+3]=="l"and TK.qasm_str[i+4]=="u"and TK.qasm_str[i+5]=="d"and TK.qasm_str[i+6]=="e":
@@ -127,7 +149,9 @@ class Token(object):
                     # Check whether the file exists
                     file_path = Path(filename)
                     if not file_path.exists():
-                        TK.annotate_error(TK.name, TK.qasm_str, file_i, "File not found", TK.line_count, TK.err_line_idx)
+                        # Skip the include "qelib1.inc";
+                        if filename != "qelib1.inc":
+                            TK.annotate_error(TK.name, TK.qasm_str, file_i, "File not found", TK.line_count, TK.err_line_idx)
                     i += 1
                     # Skip whitespaces
                     while (i < len(TK.qasm_str)) and (TK.qasm_str[i].isspace()):
