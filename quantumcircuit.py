@@ -358,6 +358,8 @@ class Quantum_circuit:
             # Create a new timeslice node for the current qubit
             time_slice_node = Time_slice_node("BARRIER")
             time_slice_node.time_slice_index = max_time_slice
+            # Set the barrier flag to True to indicate this is a barrier operation
+            time_slice_node.barrier = True
             # Add the new timeslice node to the circuit
             self.qubits[qubit_names[i]][f"timeslice_{max_time_slice}"] = time_slice_node
             # Set the maximum timeslice index for the circuit
@@ -429,18 +431,21 @@ class Quantum_circuit:
         
     def test_instruction(self):
         Instruction = Instructions.generate_instruction(self)
+        idx = 1
         for timeslice in Instruction.instructions:
-            print(f"Timeslice {timeslice}:")
-            for gate in Instruction.instructions[timeslice].instructions:
-                print(gate)
-                for i in range(len(Instruction.instructions[timeslice].instructions[gate])):
-                    if gate == "control_gate_no_condition" or gate == "control_gate_condition" or gate == "single_gate_condition":
-                        for j in range(len(Instruction.instructions[timeslice].instructions[gate][i])): 
-                            instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[gate][i][j], Instructions.N_instr_bits)
+            if Instruction.instructions[timeslice].Operation_last != "":
+                print(f"Timeslice {idx}:")
+                for gate in Instruction.instructions[timeslice].instructions:
+                    print(gate)
+                    for i in range(len(Instruction.instructions[timeslice].instructions[gate])):
+                        if gate == "control_gate_no_condition" or gate == "control_gate_condition" or gate == "single_gate_condition":
+                            for j in range(len(Instruction.instructions[timeslice].instructions[gate][i])): 
+                                instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[gate][i][j], Instructions.N_instr_bits)
+                                print(instr)
+                        else:
+                            instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[gate][i], Instructions.N_instr_bits)
                             print(instr)
-                    else:
-                        instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[gate][i], Instructions.N_instr_bits)
-                        print(instr)
+                idx += 1
         print(Instruction.N_qubit_bits)
             
     # Define the function to draw the draft quantum circuit for testing
@@ -549,8 +554,9 @@ class Quantum_circuit:
                 return False
         return True
 
-# filepath = "IR/QASM2/Examples/test_instruction_control_condition.qasm"
-filepath = "IR/QASM2/Examples/iqft.qasm"
+filepath = "IR/QASM2/Examples/test_instruction_control_condition.qasm"
+# filepath = "IR/QASM2/Examples/iqft.qasm"
 # filepath = "test_instruction_single_condition.qasm"
 QC = Quantum_circuit.from_qasm2(filepath)
 QC.test_draw()
+QC.test_instruction()

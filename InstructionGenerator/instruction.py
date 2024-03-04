@@ -105,7 +105,10 @@ class Instructions:
         self.decoherence_length = 1 # The number of bits needed to represent the decoherence
         # N_instr_bits, N_qubit_bits, operand, operand_length, timeslice_length
         self.measurement = Measurement(self.N_instr_bits, self.N_qubit_bits, self.quantum_operation_operands["measurement"], self.operand_length, 1)
-    
+        # This variable is used to indicate the last valid timeslice, this is used for adding the measurement instruction into the Instruction 
+        # during the conditional operations. This variable is used because it's possible that the valid timeslices in Instructions dictionary is 
+        # not continuous if the quantum circuit is under the hardware specification mode 1
+        self.last_valid_timeslice = 0 
     @staticmethod
     def float_to_fixed_point(value, bits_float):
         # The integer part of the value
@@ -696,7 +699,7 @@ class Instructions:
                 # Set the remaining bits of measurement instruction to 1
                 self.measurement.set_remaining_bits()
                 # Add the measurement instruction to the last timeslice
-                self.add_instruction_measurement(timeslice-1, self.measurement.get_instruction())
+                self.add_instruction_measurement(self.last_valid_timeslice, self.measurement.get_instruction())
             # Add the single qubit gate with condition to the current timeslice
             # For the first kind
             if timeslice_node.if_kind == 0:
@@ -739,8 +742,10 @@ class Instructions:
                 if not self.measurement.check_last_instruction_added():
                     # Set the remaining bits of measurement instruction to 1
                     self.measurement.set_remaining_bits()
+                    if timeslice_node.gate_operation == "crx":
+                        print(self.last_valid_timeslice)
                     # Add the measurement instruction to the last timeslice
-                    self.add_instruction_measurement(timeslice-1, self.measurement.get_instruction())
+                    self.add_instruction_measurement(self.last_valid_timeslice, self.measurement.get_instruction())
                 # Add the controlled gate with condition to the current timeslice
                 # For the first kind
                 if timeslice_node.if_kind == 0:
@@ -784,7 +789,7 @@ class Instructions:
                 self.add_instruction_single_gate_no_condition(timeslice, None, None, end_of_timeslice, None)
                 self.add_instruction_single_gate_condition(timeslice, None, None, None, None, None, None, end_of_timeslice, None)
                 self.add_instruction_control_gate_no_condition(timeslice, None, None, None, end_of_timeslice, None)
-                self.add_instruction_control_gate_condition(timeslice, None, None, None, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_condition(timeslice, None, None, None, None, None, None, None, end_of_timeslice, None)
                 self.add_instruction_decoherence(timeslice, None, None, None, end_of_timeslice)
                 self.add_instruction_reset(timeslice, None, end_of_timeslice)
             return
@@ -796,7 +801,7 @@ class Instructions:
                 self.add_instruction_single_gate_no_condition(timeslice, None, None, end_of_timeslice, None)
                 self.add_instruction_single_gate_condition(timeslice, None, None, None, None, None, None, end_of_timeslice, None)
                 self.add_instruction_control_gate_no_condition(timeslice, None, None, None, end_of_timeslice, None)
-                self.add_instruction_control_gate_condition(timeslice, None, None, None, None, None, end_of_timeslice, None)
+                self.add_instruction_control_gate_condition(timeslice, None, None, None, None, None, None, None, end_of_timeslice, None)
                 self.add_instruction_decoherence(timeslice, None, None, None, end_of_timeslice)
             return
         else:
@@ -811,9 +816,13 @@ class Instructions:
         # Loop through the quantum circuit to generate the instructions
         for timeslice_idx in range(1, quantumcircuit.max_time_slice+1):
             qubit_idx = 0
+            timeslice_empty = True
             for qubit in quantumcircuit.qubits:
                 end_of_timeslice = True if qubit_idx == len(quantumcircuit.qubits)-1 else False
-                if (f"timeslice_{timeslice_idx}" not in quantumcircuit.qubits[qubit]) and (end_of_timeslice):
+                if ((f"timeslice_{timeslice_idx}" not in quantumcircuit.qubits[qubit]) and (end_of_timeslice)):
+                    # Check whether there the whole timeslice is empty
+                    if timeslice_idx not in instruction.instructions:
+                        continue
                     instruction.add_instruction_single_gate_no_condition(timeslice_idx, None, None, end_of_timeslice, None)
                     instruction.add_instruction_single_gate_condition(timeslice_idx, None, None, None, None, None, None, end_of_timeslice, None)
                     instruction.add_instruction_control_gate_no_condition(timeslice_idx, None, None, None, end_of_timeslice, None)
@@ -822,8 +831,20 @@ class Instructions:
                     instruction.add_instruction_reset(timeslice_idx, None, end_of_timeslice)
                     continue
                 if f"timeslice_{timeslice_idx}" in quantumcircuit.qubits[qubit]:
+                    # Set the remaining bits of generated instructions to 1 and set the corresponding most significant bit
+                    if quantumcircuit.qubits[qubit][f"timeslice_{timeslice_idx}"].barrier and end_of_timeslice:
+                        # print("comming into barrier")
+                        instruction.add_instruction_single_gate_no_condition(timeslice_idx, None, None, end_of_timeslice, None)
+                        instruction.add_instruction_single_gate_condition(timeslice_idx, None, None, None, None, None, None, end_of_timeslice, None)
+                        instruction.add_instruction_control_gate_no_condition(timeslice_idx, None, None, None, end_of_timeslice, None)
+                        instruction.add_instruction_control_gate_condition(timeslice_idx, None, None, None, None, None, None, None, end_of_timeslice, None)
+                        instruction.add_instruction_decoherence(timeslice_idx, None, None, None, end_of_timeslice)
+                        instruction.add_instruction_reset(timeslice_idx, None, end_of_timeslice)
                     instruction.instruction_gen_timeslice(timeslice_idx, qubit_idx, quantumcircuit.qubits[qubit][f"timeslice_{timeslice_idx}"], end_of_timeslice, quantumcircuit)
+                    timeslice_empty = False
                 qubit_idx += 1
+            if not timeslice_empty:
+                instruction.last_valid_timeslice = timeslice_idx
         # Check whether there's a remaining measurement instruction that is not used by classical conditoned operations and should be added to the last timeslice
         if not instruction.measurement.check_last_instruction_added():
             # Set the remaining bits of measurement instruction to 1

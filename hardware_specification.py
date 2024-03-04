@@ -110,7 +110,7 @@ class Specification:
         additional_timeslice_idx = 0
         if timeslice_node.gate_operation in Specification.Offdiag_Gates:
             if not timeslice_node.controlled_operation:
-                additional_timeslice_idx = spec.additional_timeslice[qubit] if timeslice_idx > spec.offdiag_max_timeslice else spec.offdiag_max_timeslice-timeslice_idx+1
+                additional_timeslice_idx = spec.additional_timeslice[qubit] if timeslice_idx > spec.offdiag_max_timeslice else max(spec.offdiag_max_timeslice, spec.new_max_timeslice)-timeslice_idx+1
             else:
                 if timeslice_idx not in spec.off_diag_contr_connected:
                     spec.off_diag_contr_connected[timeslice_idx] = []
@@ -122,7 +122,7 @@ class Specification:
                         break
                 if idx == -1:
                     spec.off_diag_contr_connected[timeslice_idx].append(set(timeslice_node.connected_qubits))
-                    additional_timeslice_idx = spec.additional_timeslice[qubit] if timeslice_idx > spec.offdiag_max_timeslice else spec.offdiag_max_timeslice-timeslice_idx+1
+                    additional_timeslice_idx = spec.additional_timeslice[qubit] if timeslice_idx > spec.offdiag_max_timeslice else max(spec.offdiag_max_timeslice, spec.new_max_timeslice)-timeslice_idx+1
                     spec.off_diag_contr_count[timeslice_idx].append(additional_timeslice_idx+timeslice_idx)
                 else:
                     # If the current qubit is in the list, its offdiag gate count should be the same as its connected qubits
@@ -252,6 +252,7 @@ class Specification:
                     new_timeslice_node.if_creg = quantumcircuit_orig.qubits[qubit][f"timeslice_{timeslice_idx}"].if_creg
                     new_timeslice_node.if_num = quantumcircuit_orig.qubits[qubit][f"timeslice_{timeslice_idx}"].if_num
                     new_timeslice_node.if_kind = quantumcircuit_orig.qubits[qubit][f"timeslice_{timeslice_idx}"].if_kind
+                    new_timeslice_node.barrier = quantumcircuit_orig.qubits[qubit][f"timeslice_{timeslice_idx}"].barrier
                     # Add the new timeslice node to the new quantumcircuit
                     quantumcircuit_new.qubits[qubit][f"timeslice_{idx}"] = new_timeslice_node
         # Update the maximum timeslice index of the quantumcircuit_new

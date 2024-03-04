@@ -42,6 +42,7 @@ class Time_slice_node:
         self.if_creg = "" # The name of the creg that is used to condition the gate
         self.if_num = 0 # The number of the condition
         self.if_kind = 0 # The kind of the condition, 0 for single bit == val, 1 for creg == val
+        self.barrier = False # Flag to indicate if the gate is a barrier operation
     
     def add_connected_qubit(self, qubits):
         if isinstance(qubits, list):
