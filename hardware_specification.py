@@ -16,7 +16,7 @@ from timeslice import Time_slice_node
 
 class Specification:
     # The flag to indicate whether the hardware specification is needed, which is set to False by default and can be changed through command line
-    Need = True
+    Need = False
     # The flag to indicate the mode of the hardware specification, which is set to 1 by default and can be changed through command line
     Mode = 1
     Offdiag_Gates = {

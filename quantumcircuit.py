@@ -14,10 +14,9 @@ from hardware_specification import Specification
 from timeslice import Time_slice_node
 from IR.QASM2.qasm2_parser import Parser
 import struct
+import qc_configure
 
 class Quantum_circuit:
-    # Class level attributes to enable the hardware specification and optimization decorators
-    hardware_specification_enable = True
     def __init__(self):
         self.name = ""
         self.qubits = {}
@@ -440,6 +439,13 @@ class Quantum_circuit:
         Parser.compile(qasmfile, QC)
         return QC
     
+    @staticmethod
+    @HardwareSpecification
+    def from_json(jsonfile):
+        QC = Quantum_circuit()
+        qc_configure.load_from_json(jsonfile, QC)
+        return QC
+    
     #================================================================================================
     # The following functions are used to generate the instruction
     #================================================================================================
@@ -523,6 +529,10 @@ class Quantum_circuit:
                         for j in range(len(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last])):
                             format_str = '<q' if Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j] <0 else '<Q'
                             file.write(struct.pack(format_str, Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j]))
+    
+    # Define the function that dump the quantum circuit to the json file
+    def to_json(self):
+        qc_configure.dump_to_json(self)
     
     #================================================================================================
     # The following functions are used for testing
@@ -654,11 +664,11 @@ class Quantum_circuit:
                 return False
         return True
 
-filepath = "IR/QASM2/Examples/test_instruction_control_condition.qasm"
-# filepath = "IR/QASM2/Examples/iqft.qasm"
-# filepath = "test_instruction_single_condition.qasm"
-QC = Quantum_circuit.from_qasm2(filepath)
-QC.test_draw()
-QC.test_instruction()
-QC.to_binary_text()
-QC.to_binary_bin()
+# filepath = "IR/QASM2/Examples/test_instruction_control_condition.qasm"
+# # filepath = "IR/QASM2/Examples/iqft.qasm"
+# # filepath = "test_instruction_single_condition.qasm"
+# QC = Quantum_circuit.from_qasm2(filepath)
+# QC.test_draw()
+# QC.test_instruction()
+# QC.to_binary_text()
+# QC.to_binary_bin()
