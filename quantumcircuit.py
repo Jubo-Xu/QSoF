@@ -13,6 +13,7 @@ from InstructionGenerator.instruction import Instructions
 from hardware_specification import Specification
 from timeslice import Time_slice_node
 from IR.QASM2.qasm2_parser import Parser
+import struct
 
 class Quantum_circuit:
     # Class level attributes to enable the hardware specification and optimization decorators
@@ -58,6 +59,10 @@ class Quantum_circuit:
             self.cregs[creg_name + f"[{i}]"] = {}
             self.cregs_idx[creg_name + f"[{i}]"] = self.cregs_idx_idx
             self.cregs_idx_idx += 1
+    
+    #================================================================================================
+    # The following functions are used to add the quantum operations to the circuit
+    #================================================================================================
     
     # Add the current maximum time slice index for the qubit 
     def add_qubit_max_time_slice(self, qubit_name, time_slice_index, size=1):
@@ -409,6 +414,9 @@ class Quantum_circuit:
         # Update the maximum timeslice index of the circuit
         self.max_time_slice = max(self.max_time_slice, max_time_slice)
     
+    #================================================================================================
+    # The following functions are the decorators for hardware specification and optimization
+    #================================================================================================
     # # Define the decorator for hardware specifications
     def HardwareSpecification(func):
         def wrapper(*args, **kwargs):
@@ -421,14 +429,105 @@ class Quantum_circuit:
                 return quantumcircuit_orig
         return wrapper
     
-    
+    #================================================================================================
+    # The following functions are used to generate the quantum circuit from the different sources
+    #================================================================================================
+    # Generate the quantum circuit from the OpenQASM 2.0 file
     @staticmethod
     @HardwareSpecification
     def from_qasm2(qasmfile):
         QC = Quantum_circuit()
         Parser.compile(qasmfile, QC)
         return QC
-        
+    
+    #================================================================================================
+    # The following functions are used to generate the instruction
+    #================================================================================================
+    # Generate the instruction for the quantum circuit and store the binary representation into the .txt file
+    def to_binary_text(self):
+        Instruction = Instructions.generate_instruction(self)
+        instruction_text = ""
+        # Loop through all the timeslices and put the instruction with the most significant bit set to 1 be the last operation instruction
+        for timeslice in Instruction.instructions:
+            if Instruction.instructions[timeslice].Operation_last != "":
+                for gate in Instruction.instructions[timeslice].instructions:
+                    # Skip the last operation instruction
+                    if gate == Instruction.instructions[timeslice].Operation_last:
+                        continue
+                    for i in range(len(Instruction.instructions[timeslice].instructions[gate])):
+                        if gate == "control_gate_no_condition" or gate == "control_gate_condition" or gate == "single_gate_condition":
+                            for j in range(len(Instruction.instructions[timeslice].instructions[gate][i])): 
+                                instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[gate][i][j], Instructions.N_instr_bits)
+                                instruction_text += instr + "\n"
+                        else:
+                            instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[gate][i], Instructions.N_instr_bits)
+                            instruction_text += instr + "\n"
+                # Add the last operation instruction
+                # for the gate operation that has multiple kinds of instructions, add the last kind at the end
+                if Instruction.instructions[timeslice].Operation_last in {"control_gate_no_condition", "control_gate_condition", "single_gate_condition"}:
+                    for j in range(len(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last])):
+                        # Skip the last operation kind 
+                        if j == Instruction.instructions[timeslice].Operation_last_kind:
+                            continue
+                        for k in range(len(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j])): 
+                                instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j][k], Instructions.N_instr_bits)
+                                instruction_text += instr + "\n"
+                    # Add the last operation kind
+                    for k in range(len(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][Instruction.instructions[timeslice].Operation_last_kind])):
+                        instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last]\
+                            [Instruction.instructions[timeslice].Operation_last_kind][k], Instructions.N_instr_bits)
+                        instruction_text += instr + "\n"
+                else:
+                    for j in range(len(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last])):
+                        instr = Instructions.GetBinary(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j], Instructions.N_instr_bits)
+                        instruction_text += instr + "\n"
+        # Get the name of the file from quantum circuit
+        file_name = self.name+"_instr_bin.txt"
+        with open(file_name, 'w') as file:
+            file.write(instruction_text)
+            
+    # Generate the instruction for the quantum circuit and store the binary representation into the .bin file
+    def to_binary_bin(self):
+        Instruction = Instructions.generate_instruction(self)
+        with open(self.name+'_instr_bin.bin', 'wb') as file:
+            # Loop through all the timeslices and put the instruction with the most significant bit set to 1 be the last operation instruction
+            for timeslice in Instruction.instructions:
+                if Instruction.instructions[timeslice].Operation_last != "":
+                    for gate in Instruction.instructions[timeslice].instructions:
+                        # Skip the last operation instruction
+                        if gate == Instruction.instructions[timeslice].Operation_last:
+                            continue
+                        for i in range(len(Instruction.instructions[timeslice].instructions[gate])):
+                            if gate == "control_gate_no_condition" or gate == "control_gate_condition" or gate == "single_gate_condition":
+                                for j in range(len(Instruction.instructions[timeslice].instructions[gate][i])): 
+                                    file.write(struct.pack('<q', Instruction.instructions[timeslice].instructions[gate][i][j]))
+                            else:
+                                # For negative value(parameters), using signed long long type
+                                format_str = '<q' if Instruction.instructions[timeslice].instructions[gate][i] <0 else '<Q'
+                                file.write(struct.pack(format_str, Instruction.instructions[timeslice].instructions[gate][i]))
+                    # Add the last operation instruction
+                    # for the gate operation that has multiple kinds of instructions, add the last kind at the end
+                    if Instruction.instructions[timeslice].Operation_last in {"control_gate_no_condition", "control_gate_condition", "single_gate_condition"}:
+                        for j in range(len(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last])):
+                            # Skip the last operation kind 
+                            if j == Instruction.instructions[timeslice].Operation_last_kind:
+                                continue
+                            for k in range(len(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j])): 
+                                format_str = '<q' if Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j][k] <0 else '<Q'
+                                file.write(struct.pack(format_str, Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j][k]))
+                        # Add the last operation kind
+                        for k in range(len(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][Instruction.instructions[timeslice].Operation_last_kind])):
+                            format_str = '<q' if Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][Instruction.instructions[timeslice].Operation_last_kind][k] <0 else '<Q'
+                            file.write(struct.pack(format_str, Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][Instruction.instructions[timeslice].Operation_last_kind][k]))
+                    else:
+                        for j in range(len(Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last])):
+                            format_str = '<q' if Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j] <0 else '<Q'
+                            file.write(struct.pack(format_str, Instruction.instructions[timeslice].instructions[Instruction.instructions[timeslice].Operation_last][j]))
+    
+    #================================================================================================
+    # The following functions are used for testing
+    #================================================================================================
+    # Define the function to print the generated instructions of each timeslice of each type of operation for testing
     def test_instruction(self):
         Instruction = Instructions.generate_instruction(self)
         idx = 1
@@ -548,6 +647,7 @@ class Quantum_circuit:
                 pos_idx += 1
         print(circuit_str)
     
+    # Helper function to check whether the current timeslice contains no operation
     def check_empty_timeslice(self, timeslice_idx):
         for qubit in self.qubits:
             if f"timeslice_{timeslice_idx}" in self.qubits[qubit]:
@@ -560,3 +660,5 @@ filepath = "IR/QASM2/Examples/test_instruction_control_condition.qasm"
 QC = Quantum_circuit.from_qasm2(filepath)
 QC.test_draw()
 QC.test_instruction()
+QC.to_binary_text()
+QC.to_binary_bin()

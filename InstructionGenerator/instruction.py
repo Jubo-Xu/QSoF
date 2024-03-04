@@ -46,6 +46,8 @@ class timeslice_instruction_node:
         # This flag is used to indicate which operation has just been added, 
         # which is for the case where there's no operation for the last qubit at the end of timeslice
         self.Operation_last = ""
+        # This variable indicates the which kind contains the last operation for the operations that have multiple kinds of instructions
+        self.Operation_last_kind = 0
 
 class Instructions:
     # The integer bits and floating bits of parameters, which can be changed through command line
@@ -298,6 +300,8 @@ class Instructions:
         self.instructions[timeslice].instructions["single_gate_condition"][kind][self.instructions[timeslice].instruction_index["single_gate_condition"][kind]] += instruction
         # Set the last operation to the current operation
         self.instructions[timeslice].Operation_last = "single_gate_condition"
+        # Set the last operation kind
+        self.instructions[timeslice].Operation_last_kind = kind
     
     ## Define the instruction generation function of controlled gates without condition
     
@@ -385,14 +389,21 @@ class Instructions:
             self.instructions[timeslice].bit_position["control_gate_no_condition"][idx] = self.N_instr_bits
         # Check whether the current instruction is the last instruction of the timeslice
         if end_of_timeslice:
-            if not self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][idx]:
-                instruction += (1 << self.instructions[timeslice].bit_position["control_gate_no_condition"][idx]) - 1
+            # Invert the remaining bits to 1 for all kinds if they haven't been inverted
+            for i in range(len(self.instructions[timeslice].new_instruction_need["control_gate_no_condition"])):
+                if not self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][i]:
+                    self.instructions[timeslice].instructions["control_gate_no_condition"][i][self.instructions[timeslice].instruction_index["control_gate_no_condition"][i]] += \
+                        (1 << self.instructions[timeslice].bit_position["control_gate_no_condition"][i]) - 1
+            # if not self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][idx]:
+            #     instruction += (1 << self.instructions[timeslice].bit_position["control_gate_no_condition"][idx]) - 1
             instruction += (1 << (self.N_instr_bits-1))
             self.instructions[timeslice].new_instruction_need["control_gate_no_condition"][idx] = True
         # Update the instruction
         self.instructions[timeslice].instructions["control_gate_no_condition"][idx][self.instructions[timeslice].instruction_index["control_gate_no_condition"][idx]] += instruction
         # Set the last operation to the current operation
         self.instructions[timeslice].Operation_last = "control_gate_no_condition"
+        # Set the last operation kind
+        self.instructions[timeslice].Operation_last_kind = idx
     
     ## Define the instruction generation function of controlled gates with condition
     # As described in single qubit gates with condition and control gate without condition, there are two kinds of conditions and two kinds of controlled gates,
@@ -517,14 +528,19 @@ class Instructions:
             self.instructions[timeslice].bit_position["control_gate_condition"][idx] = self.N_instr_bits
         # Check whether the current instruction is the last instruction of the timeslice
         if end_of_timeslice:
-            if not self.instructions[timeslice].new_instruction_need["control_gate_condition"][idx]:
-                instruction += (1 << self.instructions[timeslice].bit_position["control_gate_condition"][idx]) - 1
+            # Invert the remaining bits to 1 for all kinds if they haven't been inverted
+            for i in range(len(self.instructions[timeslice].new_instruction_need["control_gate_condition"])):
+                if not self.instructions[timeslice].new_instruction_need["control_gate_condition"][i]:
+                    self.instructions[timeslice].instructions["control_gate_condition"][i][self.instructions[timeslice].instruction_index["control_gate_condition"][i]] += \
+                        (1 << self.instructions[timeslice].bit_position["control_gate_condition"][idx]) - 1
             instruction += (1 << (self.N_instr_bits-1))
             self.instructions[timeslice].new_instruction_need["control_gate_condition"][idx] = True
         # Update the instruction
         self.instructions[timeslice].instructions["control_gate_condition"][idx][self.instructions[timeslice].instruction_index["control_gate_condition"][idx]] += instruction
         # Set the last operation to the current operation
         self.instructions[timeslice].Operation_last = "control_gate_condition"
+        # Set the last operation kind
+        self.instructions[timeslice].Operation_last_kind = idx
     
     ## Define the instruction generation function of decoherence
     # The format of the instruction for decoherence is as follows:

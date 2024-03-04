@@ -2,6 +2,8 @@ qreg q[7];
 creg c1[2];
 creg c2[2];
 
+cx q[0], q[1];
+cx q[2], q[3], q[4], q[5] : q[6];
 h q;
 measure q[0] -> c1[0];
 measure q[1] -> c1[1];
