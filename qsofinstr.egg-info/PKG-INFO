@@ -1,0 +1,11 @@
+Metadata-Version: 2.1
+Name: qsofinstr
+Version: 0.0.1
+Summary: The test version of the quantum circuit transpiler for QSoF
+Home-page: https://github.com/Jubo-Xu/QSoF.git
+Author: Bob Xu
+Author-email: jx1820@ic.ac.uk
+Keywords: quantum computing,quantum circuit,transpiler
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6

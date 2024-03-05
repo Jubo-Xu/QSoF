@@ -1,5 +1,5 @@
 import math
-from InstructionGenerator.measurement import Measurement
+from qsofinstr.InstructionGenerator.measurement import Measurement
 # Define the class representing the instruction at each timeslice
 class timeslice_instruction_node:
     def __init__(self, N_instr_bits):

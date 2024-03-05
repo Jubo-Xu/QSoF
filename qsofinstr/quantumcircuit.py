@@ -9,12 +9,12 @@ this condition. It can be changed later if the hardware design is improved.
 
 The quantum circuit after the segmentation would be described by a 3D graph
 '''
-from InstructionGenerator.instruction import Instructions
-from hardware_specification import Specification
-from timeslice import Time_slice_node
-from IR.QASM2.qasm2_parser import Parser
+from qsofinstr.InstructionGenerator.instruction import Instructions
+from qsofinstr.hardware_specification import Specification
+from qsofinstr.timeslice import Time_slice_node
+from qsofinstr.IR.QASM2.qasm2_parser import Parser
 import struct
-import qc_configure
+import qsofinstr.qc_configure
 
 class Quantum_circuit:
     def __init__(self):
@@ -443,7 +443,7 @@ class Quantum_circuit:
     @HardwareSpecification
     def from_json(jsonfile):
         QC = Quantum_circuit()
-        qc_configure.load_from_json(jsonfile, QC)
+        qsofinstr.qc_configure.load_from_json(jsonfile, QC)
         return QC
     
     #================================================================================================
@@ -532,7 +532,7 @@ class Quantum_circuit:
     
     # Define the function that dump the quantum circuit to the json file
     def to_json(self):
-        qc_configure.dump_to_json(self)
+        qsofinstr.qc_configure.dump_to_json(self)
     
     #================================================================================================
     # The following functions are used for testing

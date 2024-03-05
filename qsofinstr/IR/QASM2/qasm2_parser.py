@@ -1,7 +1,7 @@
-from IR.QASM2.qasm2_token import Token
-from IR.QASM2 import qasm2_token
+from qsofinstr.IR.QASM2.qasm2_token import Token
+from qsofinstr.IR.QASM2 import qasm2_token
 # import quantumcircuit
-import timeslice
+import qsofinstr.timeslice
 import math
 from collections import deque
 import os
@@ -440,7 +440,7 @@ class Parser(Token):
             if self.current_file.token[self.current_file.token_idx+1][self.str_idx] in self.opaques:
                 self.error_at(self.current_file.token_idx+1, "opaque "+self.current_file.token[self.current_file.token_idx+1][self.str_idx]+" already defined")
             # Check whether the opaque defined is supported by QSoF
-            if self.current_file.token[self.current_file.token_idx+1][self.str_idx] not in timeslice.Opaque_Table:
+            if self.current_file.token[self.current_file.token_idx+1][self.str_idx] not in qsofinstr.timeslice.Opaque_Table:
                 self.error_at(self.current_file.token_idx+1, "opaque "+self.current_file.token[self.current_file.token_idx+1][self.str_idx]+" is not supported by QSoF")
             if self.check_operator_str(self.current_file.token_idx+2, "("):
                 # Recursive descent parsing for 'opaque id (idlist) idlist ;'
@@ -451,9 +451,9 @@ class Parser(Token):
                     params = self.idlist_param()
                     opaque_instance.add_params(params)
                     # Check whether the number of parameters is incorrect 
-                    if len(params) != timeslice.Opaque_Table[name]:
+                    if len(params) != qsofinstr.timeslice.Opaque_Table[name]:
                         # Check whether the number of parameters is larger than the maximum number of parameters
-                        if len(params) > timeslice.Opaque_Table[name]:
+                        if len(params) > qsofinstr.timeslice.Opaque_Table[name]:
                             self.error_at(self.current_file.token_idx-1, "The number of parameters exceeds the maximum number of parameters of opaque "+name)
                         else:
                             self.error_at(self.current_file.token_idx-1, "The number of parameters is less than the number of parameters required for opaque "+name)
@@ -471,8 +471,8 @@ class Parser(Token):
                     self.get_next_token()
                     name = self.current_file.token[self.current_file.token_idx][self.str_idx]
                     # Check whether the opaque should have parameters
-                    if timeslice.Opaque_Table[name] != 0:
-                        self.error_at(self.current_file.token_idx+2, "The number of parameters should be "+str(timeslice.Opaque_Table[name]))
+                    if qsofinstr.timeslice.Opaque_Table[name] != 0:
+                        self.error_at(self.current_file.token_idx+2, "The number of parameters should be "+str(qsofinstr.timeslice.Opaque_Table[name]))
                     self.get_next_token(3)
                     opaque_instance = Opaque(name)
                     args = self.idlist_qubit().qregs
@@ -490,8 +490,8 @@ class Parser(Token):
                 self.get_next_token()
                 name = self.current_file.token[self.current_file.token_idx][self.str_idx]
                 # Check whether the opaque should have parameters
-                if timeslice.Opaque_Table[name] != 0:
-                    self.error_at(self.current_file.token_idx, "The number of parameters should be "+str(timeslice.Opaque_Table[name]))
+                if qsofinstr.timeslice.Opaque_Table[name] != 0:
+                    self.error_at(self.current_file.token_idx, "The number of parameters should be "+str(qsofinstr.timeslice.Opaque_Table[name]))
                 self.get_next_token(2)
                 opaque_instance = Opaque(name)
                 args = self.idlist_qubit().qregs
@@ -1424,7 +1424,7 @@ class Parser(Token):
                 if len(exp_list) == len(self.opaques[self.GATE_name].params):
                     self.error_at(self.current_file.token_idx, f"The number of parameters exceeds the number of parameters required for opaque {self.GATE_name}")
             else:
-                if len(exp_list) == timeslice.Param_Num_Table[self.GATE_name_support]:
+                if len(exp_list) == qsofinstr.timeslice.Param_Num_Table[self.GATE_name_support]:
                     self.error_at(self.current_file.token_idx, f"The number of parameters exceeds the number of parameters required for gate {self.GATE_name}")
                 
             exp_list.append(self.exp())
@@ -1436,7 +1436,7 @@ class Parser(Token):
             if len(exp_list) < len(self.opaques[self.GATE_name].params):
                 self.error_at(self.current_file.token_idx, f"The number of parameters is less than the number of parameters required for opaque {self.GATE_name}")
         else:
-            if len(exp_list) < timeslice.Param_Num_Table[self.GATE_name_support]:
+            if len(exp_list) < qsofinstr.timeslice.Param_Num_Table[self.GATE_name_support]:
                 self.error_at(self.current_file.token_idx, f"The number of parameters is less than the number of parameters required for gate {self.GATE_name}")
         node_explist = Parser.create_node_explist(exp_list)
         return node_explist

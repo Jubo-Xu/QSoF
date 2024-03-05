@@ -12,7 +12,7 @@ the hardware architecture is a circular architecture with the timeslices will be
 new states, the stalls happened for hardwware, therefore mode 2 could make hardware implementation easier. The choice of mode depends on the exact
 comparison between the latency of the hardware implementation as well as the complexity of the control logic, which will be determined later.
 '''
-from timeslice import Time_slice_node
+from qsofinstr.timeslice import Time_slice_node
 
 class Specification:
     # The flag to indicate whether the hardware specification is needed, which is set to False by default and can be changed through command line

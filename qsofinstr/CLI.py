@@ -1,5 +1,5 @@
-from quantumcircuit import Quantum_circuit
-from hardware_specification import Specification
+from qsofinstr.quantumcircuit import Quantum_circuit
+from qsofinstr.hardware_specification import Specification
 import argparse
 import sys
 

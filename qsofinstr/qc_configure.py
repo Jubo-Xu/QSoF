@@ -4,7 +4,7 @@ is represented as a graph based data structure in QSoF, the quantum circuit can 
 with other tools, and the quantum circuit itself can also be configured through a json file. 
 '''
 import json
-from timeslice import Time_slice_node
+from qsofinstr.timeslice import Time_slice_node
 
 # The function to transfer the timeslice node to a dictionary
 def timeslice_node_to_dict(timeslice_node):

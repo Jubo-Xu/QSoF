@@ -72,8 +72,9 @@ class Token(object):
         self.include_file_list = []
         
     def file2str(self, filename0):
-        root_dir = Path(__file__).resolve().parents[2]
-        filename = root_dir / filename0
+        # root_dir = Path(__file__).resolve().parents[2]
+        # filename = root_dir / filename0
+        filename = Path(filename0).resolve()
         with open(filename, 'r') as file:
             for line in file:
             # Add the processed line to the contents string with a space

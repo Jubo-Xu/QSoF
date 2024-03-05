@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 # The following information is just for testing
 setup(
     name='qsofinstr',  
-    version='0.1.0',  
+    version='0.0.1',  
     author='Bob Xu',  
     author_email='jx1820@ic.ac.uk',  # Current email
     description='The test version of the quantum circuit transpiler for QSoF', 
@@ -15,6 +15,7 @@ setup(
         # List of dependencies required by qsofinstr
         # Currently, there are no dependencies, when optimization functionality is added, the dependencies will be added
     ],
+    keywords=['quantum computing', 'quantum circuit', 'transpiler'],  # Optional: keywords for the package
     classifiers=[
         'Programming Language :: Python :: 3',
         # 'License :: OSI Approved :: MIT License',  # Replace with the appropriate license
@@ -24,7 +25,7 @@ setup(
     entry_points={
         # Optional: define console scripts or GUI applications
         'console_scripts': [
-            'qsofinstr=qsof.CLI:main', # Path and name can be adjusted later
+            'qsofinstr=qsofinstr.CLI:main', # Path and name can be adjusted later
         ],
     },
     # Add other parameters as needed, such as package_data, include_package_data, etc later
